@@ -17,6 +17,7 @@ CONTROL_API_TOKEN=dev-token CONTROL_API_DB_PATH=./data/control-api.db uvicorn se
 - `GET /tasks/{task_id}` — task detail.
 - `GET /projects` — project summaries.
 - `GET /agents` — agent statuses.
+- `WS /ws/events?token=...` — initial snapshot and live task events.
 
 All endpoints except `/health` require:
 
@@ -29,3 +30,10 @@ Authorization: Bearer <CONTROL_API_TOKEN>
 `HermesTaskService` currently records queued tasks through the projection layer. Set `CONTROL_API_DB_PATH` to persist task state in SQLite across API restarts; omit it for in-memory development mode.
 
 Real Hermes execution is still intentionally behind the `HermesTaskService` seam. A future adapter can call Hermes CLI, Hermes API Server, the gateway, or another local integration surface without changing mobile-facing contracts.
+
+## More detail
+
+- API contract: `../../docs/API.md`
+- Architecture and layer rules: `../../ARCHITECTURE.md`
+- Test strategy: `../../TESTING.md`
+- Operations runbook: `../../docs/OPERATIONS.md`

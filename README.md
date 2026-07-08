@@ -9,7 +9,9 @@ This repository is newly initialized and currently contains:
 - `services/control_api/` — FastAPI companion API with token auth, optional SQLite task persistence, task/project/agent read models, and task submission shell.
 - `apps/mobile/` — Expo React Native app shell with dashboard, bottom navigation, tasks, projects, voice-capable new task, and settings screens.
 - `scripts/verify.py` — canonical unit/integration/e2e verification runner.
+- `ARCHITECTURE.md` — backend/mobile layer map, dependency rules, and integration seam.
 - `TESTING.md` — layer map and test strategy.
+- `docs/` — API contract, operations runbook, and documentation index.
 - `.hermes/plans/` — implementation plan used for this build.
 
 Agent Queue is a separate project and is not a dependency of this app at this time.
@@ -71,7 +73,15 @@ Connected Android release build/sideload verification:
 python scripts/verify.py --android --sideload
 ```
 
-See `TESTING.md` for the unit, integration, and e2e layer map.
+See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-boundary test map.
+
+## Documentation map
+
+- `ARCHITECTURE.md` — layer boundaries and dependency direction.
+- `TESTING.md` — verification strategy and coverage map.
+- `docs/API.md` — REST/WebSocket contract.
+- `docs/OPERATIONS.md` — local runbook, Android build/sideload notes, troubleshooting.
+- `docs/README.md` — documentation index.
 
 ## Security notes
 
