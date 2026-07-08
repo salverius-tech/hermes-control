@@ -1,8 +1,10 @@
 import { useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { readCache, writeCache } from '@/api/cache';
 import { apiFetch, TaskEvent, TaskSummary } from '@/api/client';
 import { MetricCard } from '@/components/MetricCard';
 import { bottomNavigationHeight } from '@/navigation/constants';
@@ -17,6 +19,7 @@ export default function TaskDetailScreen() {
   const [task, setTask] = useState<TaskSummary | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,15 +28,23 @@ export default function TaskDetailScreen() {
       try {
         setLoading(true);
         setError(null);
+        setCacheNotice(null);
         const [taskResult, eventResult] = await Promise.all([
           apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}`),
           apiFetch<TaskEvent[]>(apiUrl, apiToken, `/tasks/${taskId}/events`),
         ]);
+        await writeCache(AsyncStorage, `tasks:${taskId}`, { events: eventResult, task: taskResult });
         if (mounted) {
           setTask(taskResult);
           setEvents(eventResult);
         }
       } catch (err) {
+        const cached = await readCache<{ task: TaskSummary; events: TaskEvent[] }>(AsyncStorage, `tasks:${taskId}`);
+        if (mounted && cached) {
+          setTask(cached.task);
+          setEvents(cached.events);
+          setCacheNotice('Showing cached task details while the API is unavailable.');
+        }
         if (mounted) setError(err instanceof Error ? err.message : 'Failed to load task');
       } finally {
         if (mounted) setLoading(false);
@@ -48,6 +59,7 @@ export default function TaskDetailScreen() {
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}> 
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
+      {cacheNotice ? <Text style={styles.muted}>{cacheNotice}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {task ? (
         <>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { readCache, writeCache } from '@/api/cache';
 import { apiFetch, ProjectSummary } from '@/api/client';
 import { MetricCard } from '@/components/MetricCard';
 import { bottomNavigationHeight } from '@/navigation/constants';
@@ -12,6 +14,8 @@ export default function ProjectsScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,8 +23,17 @@ export default function ProjectsScreen() {
     async function loadProjects() {
       try {
         setLoading(true);
+        setCacheNotice(null);
         const result = await apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects');
+        await writeCache(AsyncStorage, 'projects:list', result);
         if (mounted) setProjects(result);
+      } catch (err) {
+        const cached = await readCache<ProjectSummary[]>(AsyncStorage, 'projects:list');
+        if (mounted && cached) {
+          setProjects(cached);
+          setCacheNotice('Showing cached projects while the API is unavailable.');
+        }
+        if (mounted) setError(err instanceof Error ? err.message : 'Failed to load projects');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -35,6 +48,8 @@ export default function ProjectsScreen() {
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
+      {cacheNotice ? <Text style={styles.muted}>{cacheNotice}</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       {projects.map((project) => (
         <MetricCard key={project.project_id} title={project.name} subtitle={project.project_id}>
           <Text style={styles.counts}>
@@ -56,6 +71,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '700',
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 15,
   },
   muted: {
     color: colors.muted,
