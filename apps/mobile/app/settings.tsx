@@ -56,6 +56,7 @@ export default function SettingsScreen() {
       {diagnostics ? (
         <MetricCard title="Diagnostics" subtitle={`API ${diagnostics.version}`}>
           <Text style={styles.help}>Storage: {diagnostics.storage}</Text>
+          <Text style={styles.help}>Schema: {diagnostics.schema_version}</Text>
           <Text style={styles.help}>Execution: {diagnostics.execution_mode}</Text>
           <Text style={styles.help}>Events: {diagnostics.websocket_path}</Text>
         </MetricCard>

@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from services.control_api.models import TaskCreateRequest, TaskStatus
@@ -40,3 +42,13 @@ def test_sqlite_task_store_reloads_task_updates(tmp_path):
     assert reloaded is not None
     assert reloaded.status == TaskStatus.RUNNING
     assert reloaded.progress_log == ["Task started"]
+
+
+def test_sqlite_task_store_tracks_schema_version(tmp_path):
+    db_path = tmp_path / "tasks.db"
+
+    store = SQLiteTaskStore(db_path)
+    with sqlite3.connect(db_path) as connection:
+        version = connection.execute("SELECT version FROM schema_migrations WHERE name = ?", ("control_api",)).fetchone()
+
+    assert version == (store.schema_version,)

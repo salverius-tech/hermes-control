@@ -19,6 +19,8 @@ class TaskStore(Protocol):
 
 
 class SQLiteTaskStore:
+    schema_version = 1
+
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,25 +76,53 @@ class SQLiteTaskStore:
 
     def _initialize(self) -> None:
         with self._connect() as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tasks (
-                    task_id TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    payload TEXT NOT NULL
-                )
-                """
+            self._ensure_migration_table(connection)
+            self._apply_schema(connection)
+            self._record_schema_version(connection)
+
+    def _ensure_migration_table(self, connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                name TEXT PRIMARY KEY,
+                version INTEGER NOT NULL,
+                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS task_events (
-                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    task_id TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    payload TEXT NOT NULL
-                )
-                """
+            """
+        )
+
+    def _apply_schema(self, connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+                task_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                payload TEXT NOT NULL
             )
-            connection.execute("CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id)")
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS task_events (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id)")
+
+    def _record_schema_version(self, connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            INSERT INTO schema_migrations (name, version)
+            VALUES (?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                version = excluded.version,
+                applied_at = CURRENT_TIMESTAMP
+            """,
+            ("control_api", self.schema_version),
+        )

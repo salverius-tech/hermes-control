@@ -16,7 +16,8 @@ from .websocket import ConnectionManager
 def create_app() -> FastAPI:
     app = FastAPI(title="Hermes Mobile Control API", version="0.1.0")
     store_path = os.getenv("CONTROL_API_DB_PATH")
-    projection = TaskProjection(store=SQLiteTaskStore(store_path)) if store_path else TaskProjection()
+    store = SQLiteTaskStore(store_path) if store_path else None
+    projection = TaskProjection(store=store) if store else TaskProjection()
     task_service = HermesTaskService(projection=projection)
     connections = ConnectionManager()
 
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
         return {
             "version": "0.1.0",
             "storage": "sqlite" if store_path else "memory",
+            "schema_version": str(store.schema_version) if store else "0",
             "execution_mode": "command" if os.getenv("CONTROL_API_HERMES_COMMAND") else "unconfigured",
             "websocket_path": "/ws/events",
         }

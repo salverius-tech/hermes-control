@@ -19,6 +19,7 @@ def test_diagnostics_reports_backend_storage_and_execution_mode(monkeypatch, tmp
     assert response.json() == {
         "version": "0.1.0",
         "storage": "sqlite",
+        "schema_version": "1",
         "execution_mode": "command",
         "websocket_path": "/ws/events",
     }

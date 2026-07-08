@@ -45,6 +45,7 @@ export type AgentStatus = {
 export type Diagnostics = {
   version: string;
   storage: 'memory' | 'sqlite';
+  schema_version: string;
   execution_mode: 'unconfigured' | 'command';
   websocket_path: string;
 };
