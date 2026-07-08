@@ -1,7 +1,5 @@
-import type { Href } from 'expo-router';
-
 export type NavigationItem = {
-  href: Href;
+  href: '/' | '/tasks' | '/new-task' | '/projects' | '/settings';
   label: string;
   icon: string;
 };
@@ -14,8 +12,8 @@ export const navigationItems: NavigationItem[] = [
   { href: '/settings', label: 'API', icon: '⚙' },
 ];
 
-export function isActiveRoute(pathname: string, href: Href): boolean {
-  const route = String(href);
+export function isActiveRoute(pathname: string, href: NavigationItem['href']): boolean {
+  const route = href;
   if (route === '/') return pathname === '/';
   return pathname === route || pathname.startsWith(`${route}/`);
 }

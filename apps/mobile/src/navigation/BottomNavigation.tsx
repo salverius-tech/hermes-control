@@ -1,4 +1,4 @@
-import { Link, usePathname } from 'expo-router';
+import { Link, type Href, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,7 +17,7 @@ export function BottomNavigation() {
         {navigationItems.map((item) => {
           const active = isActiveRoute(pathname, item.href);
           return (
-            <Link key={item.label} href={item.href} asChild>
+            <Link key={item.label} href={item.href as Href} asChild>
               <Pressable style={({ pressed }) => [styles.item, active && styles.activeItem, pressed && styles.pressed]}>
                 <Text style={[styles.icon, active && styles.activeText]}>{item.icon}</Text>
                 <Text style={[styles.label, active && styles.activeText]}>{item.label}</Text>
