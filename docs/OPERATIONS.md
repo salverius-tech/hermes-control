@@ -11,6 +11,12 @@ CONTROL_API_TOKEN=dev-token CONTROL_API_DB_PATH=./data/control-api.db uvicorn se
 
 Use a real secret outside source control for anything beyond local development.
 
+To execute submitted tasks with a local Hermes command, add `CONTROL_API_HERMES_COMMAND`. The task prompt is sent on stdin.
+
+```bash
+CONTROL_API_HERMES_COMMAND='hermes chat -q'
+```
+
 ## Mobile development
 
 ```bash
@@ -50,6 +56,14 @@ Connected-device release install/launch check:
 python scripts/verify.py --android --sideload
 ```
 
+Connected-device release install/launch plus Maestro UI smoke flow:
+
+```bash
+python scripts/verify.py --maestro
+```
+
+The Maestro flow lives at `.maestro/smoke.yaml`. It verifies dashboard text, bottom navigation, Settings gear navigation, and the absence of the old redundant dashboard action buttons.
+
 If sideload fails with `no devices/emulators found`, unlock the phone, connect USB, enable USB debugging, and rerun `adb devices` until the device appears as `device`.
 
 ## Android environment
@@ -63,6 +77,14 @@ ANDROID_SDK_ROOT=%ANDROID_HOME%
 ```
 
 `apps/mobile/android/local.properties` is local-only and ignored by git.
+
+Maestro is installed from the official `maestro.zip` release at:
+
+```text
+C:\Users\jthol\.maestro\maestro
+```
+
+The verifier adds Android Studio's bundled JBR, Android platform-tools, and Maestro to the subprocess `PATH`.
 
 ## Release/debug APK notes
 
@@ -94,6 +116,6 @@ cd apps/mobile/android
 ./gradlew assembleRelease
 ```
 
-### Real Hermes execution is missing
+### Tasks complete with an unconfigured-adapter message
 
-This is expected. Implement it behind `services/control_api/hermes_client.py` after selecting the integration surface: Hermes API Server, gateway, CLI, or another explicit adapter.
+Set `CONTROL_API_HERMES_COMMAND` to the local Hermes command you want the companion API to run. Without it, the API intentionally records a completed dry-run lifecycle so mobile clients can test task timelines without invoking Hermes.

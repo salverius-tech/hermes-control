@@ -4,20 +4,20 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskStatus, TaskSummary
+from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskStatus, TaskSummary
 from .storage import TaskStore
 
 
 class TaskProjection:
-    """In-memory read model for the mobile MVP.
-
-    The projection is intentionally small and swappable; persistence can move to
-    SQLite later without changing the mobile-facing API contracts.
-    """
+    """Task read model and event projection for the mobile control API."""
 
     def __init__(self, store: TaskStore | None = None) -> None:
         self._store = store
         self._tasks: dict[str, TaskSummary] = {task.task_id: task for task in store.load_tasks()} if store else {}
+        self._events: dict[str, list[TaskEvent]] = defaultdict(list)
+        if store:
+            for event in store.load_events():
+                self._events[event.task_id].append(event)
         self._agents: dict[str, AgentStatus] = {
             "hermes-agent": AgentStatus(agent_id="hermes-agent"),
         }
@@ -38,6 +38,7 @@ class TaskProjection:
         )
         self._tasks[task_id] = task
         self._save(task)
+        self.record_event(task_id, event_type="task.created", status=TaskStatus.QUEUED, message="Task queued")
         return task
 
     def list_tasks(self) -> list[TaskSummary]:
@@ -45,6 +46,9 @@ class TaskProjection:
 
     def get_task(self, task_id: str) -> TaskSummary | None:
         return self._tasks.get(task_id)
+
+    def list_task_events(self, task_id: str) -> list[TaskEvent]:
+        return sorted(self._events.get(task_id, []), key=lambda event: event.created_at)
 
     def update_task(
         self,
@@ -54,6 +58,7 @@ class TaskProjection:
         progress_message: str | None = None,
         result_summary: str | None = None,
         error: str | None = None,
+        event_type: str = "task.updated",
     ) -> TaskSummary:
         task = self._tasks[task_id]
         update_data = task.model_dump()
@@ -69,7 +74,27 @@ class TaskProjection:
         updated = TaskSummary(**update_data)
         self._tasks[task_id] = updated
         self._save(updated)
+        self.record_event(
+            task_id,
+            event_type=event_type,
+            status=TaskStatus(updated.status),
+            message=progress_message or result_summary or error,
+        )
         return updated
+
+    def record_event(
+        self,
+        task_id: str,
+        *,
+        event_type: str,
+        status: TaskStatus | None = None,
+        message: str | None = None,
+    ) -> TaskEvent:
+        event = TaskEvent(task_id=task_id, event_type=event_type, status=status, message=message)
+        self._events[task_id].append(event)
+        if self._store is not None:
+            self._store.save_event(event)
+        return event
 
     def _save(self, task: TaskSummary) -> None:
         if self._store is not None:

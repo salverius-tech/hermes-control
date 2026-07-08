@@ -37,6 +37,9 @@ class ConnectionManager:
     async def broadcast_task_created(self, task: TaskSummary) -> None:
         await self.broadcast({"type": "task.created", "task": task.model_dump(mode="json")})
 
+    async def broadcast_task_updated(self, task: TaskSummary) -> None:
+        await self.broadcast({"type": "task.updated", "task": task.model_dump(mode="json")})
+
     async def broadcast(self, message: dict) -> None:
         stale: list[WebSocket] = []
         for websocket in list(self._connections):

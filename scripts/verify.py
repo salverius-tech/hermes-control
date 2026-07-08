@@ -28,17 +28,34 @@ def project_python() -> str:
 
 def android_env() -> dict[str, str]:
     env = os.environ.copy()
-    env.setdefault("JAVA_HOME", r"C:\Program Files\Android\Android Studio\jbr")
-    env.setdefault("ANDROID_HOME", r"C:\Users\jthol\AppData\Local\Android\Sdk")
+    if os.name == "nt":
+        env["JAVA_HOME"] = r"C:\Program Files\Android\Android Studio\jbr"
+        env["ANDROID_HOME"] = r"C:\Users\jthol\AppData\Local\Android\Sdk"
+    else:
+        env.setdefault("JAVA_HOME", r"C:\Program Files\Android\Android Studio\jbr")
+        env.setdefault("ANDROID_HOME", r"C:\Users\jthol\AppData\Local\Android\Sdk")
     env.setdefault("ANDROID_SDK_ROOT", env["ANDROID_HOME"])
     env["PATH"] = os.pathsep.join(
         [
             str(Path(env["JAVA_HOME"]) / "bin"),
             str(Path(env["ANDROID_HOME"]) / "platform-tools"),
+            str(Path.home() / ".maestro" / "maestro" / "bin"),
             env.get("PATH", ""),
         ]
     )
     return env
+
+
+def maestro_command() -> str:
+    binary = "maestro.bat" if os.name == "nt" else "maestro"
+    candidates = [
+        Path.home() / ".maestro" / "maestro" / "bin" / binary,
+        Path.home() / ".maestro" / "bin" / binary,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return command("maestro")
 
 
 def run(label: str, cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
@@ -114,16 +131,26 @@ def verify_android(*, sideload: bool) -> None:
     print(f"Android app running pid: {pid}")
 
 
+def verify_maestro() -> None:
+    env = android_env()
+    env.setdefault("MAESTRO_CLI_NO_ANALYTICS", "true")
+    env.setdefault("MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED", "true")
+    run("Maestro UI smoke flow", [maestro_command(), "test", ".maestro/smoke.yaml"], ROOT, env)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Verify Hermes Mobile Control layers.")
     parser.add_argument("--android", action="store_true", help="also build the Android release APK")
     parser.add_argument("--sideload", action="store_true", help="install and launch the release APK on a connected device")
+    parser.add_argument("--maestro", action="store_true", help="run the Maestro UI smoke flow on a connected Android device")
     args = parser.parse_args()
 
     verify_backend()
     verify_mobile()
-    if args.android or args.sideload:
-        verify_android(sideload=args.sideload)
+    if args.android or args.sideload or args.maestro:
+        verify_android(sideload=args.sideload or args.maestro)
+    if args.maestro:
+        verify_maestro()
     print("\nCANONICAL VERIFICATION PASSED")
 
 

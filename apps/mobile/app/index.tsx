@@ -1,4 +1,3 @@
-import { Link } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,20 +30,11 @@ export default function DashboardScreen() {
           <Text style={styles.metric}>0</Text>
         </MetricCard>
       </View>
-
-      <View style={styles.actions}>
-        <Link href="/new-task" style={styles.primaryAction}>Start new task</Link>
-        <Link href="/tasks" style={styles.secondaryAction}>View tasks</Link>
-        <Link href="/settings" style={styles.secondaryAction}>Configure API</Link>
-      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: {
-    gap: spacing.md,
-  },
   container: {
     gap: spacing.lg,
     padding: spacing.lg,
@@ -70,28 +60,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 42,
     fontWeight: '900',
-  },
-  primaryAction: {
-    backgroundColor: colors.primary,
-    borderRadius: 18,
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
-    overflow: 'hidden',
-    padding: spacing.lg,
-    textAlign: 'center',
-  },
-  secondaryAction: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    overflow: 'hidden',
-    padding: spacing.md,
-    textAlign: 'center',
   },
   subtitle: {
     color: colors.muted,

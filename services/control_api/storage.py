@@ -5,13 +5,17 @@ import sqlite3
 from pathlib import Path
 from typing import Protocol
 
-from .models import TaskSummary
+from .models import TaskEvent, TaskSummary
 
 
 class TaskStore(Protocol):
     def load_tasks(self) -> list[TaskSummary]: ...
 
     def save_task(self, task: TaskSummary) -> None: ...
+
+    def load_events(self) -> list[TaskEvent]: ...
+
+    def save_event(self, event: TaskEvent) -> None: ...
 
 
 class SQLiteTaskStore:
@@ -44,6 +48,27 @@ class SQLiteTaskStore:
                 ),
             )
 
+    def load_events(self) -> list[TaskEvent]:
+        with self._connect() as connection:
+            rows = connection.execute("SELECT payload FROM task_events ORDER BY created_at ASC").fetchall()
+        return [TaskEvent.model_validate(json.loads(row[0])) for row in rows]
+
+    def save_event(self, event: TaskEvent) -> None:
+        payload = event.model_dump(mode="json")
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO task_events (task_id, event_type, created_at, payload)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    event.task_id,
+                    event.event_type,
+                    payload["created_at"],
+                    json.dumps(payload, separators=(",", ":")),
+                ),
+            )
+
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path)
 
@@ -59,3 +84,15 @@ class SQLiteTaskStore:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS task_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    payload TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id)")

@@ -68,6 +68,14 @@ Android device review is also available as a heavier e2e verification path:
 python scripts/verify.py --android --sideload
 ```
 
+Device UI smoke coverage is provided by Maestro:
+
+```bash
+python scripts/verify.py --maestro
+```
+
+The Maestro flow lives at `.maestro/smoke.yaml`. It launches the installed app, verifies the dashboard, checks that redundant dashboard action buttons are absent, navigates through Home/Tasks/New/Projects/Settings, and returns Home through the bottom bar.
+
 ## Boundary tests
 
 Architecture tests guard against accidental layer erosion:
@@ -106,4 +114,10 @@ Run all checks including Android release build and connected-device sideload:
 
 ```bash
 python scripts/verify.py --android --sideload
+```
+
+Run all checks including Android release build, connected-device sideload, and Maestro UI smoke testing:
+
+```bash
+python scripts/verify.py --maestro
 ```

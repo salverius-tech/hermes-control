@@ -1,1 +1,1 @@
-export const bottomNavigationHeight = 76;
+export const bottomNavigationHeight = 84;

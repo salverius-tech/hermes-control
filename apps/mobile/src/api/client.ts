@@ -17,6 +17,14 @@ export type TaskSummary = {
   error?: string | null;
 };
 
+export type TaskEvent = {
+  task_id: string;
+  event_type: string;
+  status?: TaskStatus | null;
+  message?: string | null;
+  created_at: string;
+};
+
 export type ProjectSummary = {
   project_id: string;
   name: string;
@@ -32,6 +40,13 @@ export type AgentStatus = {
   current_task_id?: string | null;
   project_id: string;
   last_seen_at?: string | null;
+};
+
+export type Diagnostics = {
+  version: string;
+  storage: 'memory' | 'sqlite';
+  execution_mode: 'unconfigured' | 'command';
+  websocket_path: string;
 };
 
 export async function apiFetch<T>(

@@ -6,8 +6,8 @@ Android-first, iOS-ready mobile control app for local Hermes infrastructure.
 
 This repository is newly initialized and currently contains:
 
-- `services/control_api/` — FastAPI companion API with token auth, optional SQLite task persistence, task/project/agent read models, and task submission shell.
-- `apps/mobile/` — Expo React Native app shell with dashboard, bottom navigation, tasks, projects, voice-capable new task, and settings screens.
+- `services/control_api/` — FastAPI companion API with token auth, optional SQLite task/event persistence, task/project/agent read models, diagnostics, and a configurable Hermes command executor.
+- `apps/mobile/` — Expo React Native app shell with dashboard, bottom navigation, task timelines/results, projects, voice-capable new task, diagnostics, and settings screens.
 - `scripts/verify.py` — canonical unit/integration/e2e verification runner.
 - `ARCHITECTURE.md` — backend/mobile layer map, dependency rules, and integration seam.
 - `TESTING.md` — layer map and test strategy.
@@ -23,6 +23,12 @@ python -m venv .venv
 source .venv/Scripts/activate
 python -m pip install -r requirements.txt
 CONTROL_API_TOKEN=dev-token CONTROL_API_DB_PATH=./data/control-api.db uvicorn services.control_api.main:app --host 0.0.0.0 --port 8787
+```
+
+Optional local Hermes command execution:
+
+```bash
+CONTROL_API_HERMES_COMMAND='hermes chat -q'
 ```
 
 Health check:
@@ -72,6 +78,14 @@ Connected Android release build/sideload verification:
 ```bash
 python scripts/verify.py --android --sideload
 ```
+
+Connected Android release build/sideload plus Maestro UI smoke flow:
+
+```bash
+python scripts/verify.py --maestro
+```
+
+Maestro is installed from the official Windows-compatible ZIP release under `C:\Users\jthol\.maestro\maestro`; `scripts/verify.py` adds Android Studio's bundled JBR and Maestro to the verification environment.
 
 See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-boundary test map.
 
