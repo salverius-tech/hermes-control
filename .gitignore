@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+build/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Local Android signing/debug artifacts
+apps/mobile/android/app/debug.keystore
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

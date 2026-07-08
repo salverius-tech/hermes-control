@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Hermes Mobile Control",
+    "slug": "hermes-mobile-control",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "hermesmobilecontrol",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Record voice prompts for Hermes tasks.",
+        "NSSpeechRecognitionUsageDescription": "Transcribe voice prompts for Hermes tasks.",
+        "NSLocalNetworkUsageDescription": "Connect to your local Hermes control API."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1020"
+      },
+      "package": "com.anonymous.hermesmobilecontrol"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Hermes Mobile Control to record voice prompts for Hermes tasks.",
+          "speechRecognitionPermission": "Allow Hermes Mobile Control to transcribe voice prompts for Hermes tasks.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

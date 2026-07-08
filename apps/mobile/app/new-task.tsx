@@ -1,0 +1,221 @@
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import { useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { apiFetch, TaskSummary } from '@/api/client';
+import { appendTranscript } from '@/features/tasks/prompt';
+import { bottomNavigationHeight } from '@/navigation/constants';
+import { useSettingsStore } from '@/state/settings';
+import { colors, spacing } from '@/theme/tokens';
+
+export default function NewTaskScreen() {
+  const { apiUrl, apiToken } = useSettingsStore();
+  const insets = useSafeAreaInsets();
+  const [prompt, setPrompt] = useState('');
+  const [partialTranscript, setPartialTranscript] = useState('');
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useSpeechRecognitionEvent('start', () => {
+    setVoiceError(null);
+    setPartialTranscript('');
+    setListening(true);
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    setListening(false);
+    setPartialTranscript('');
+  });
+
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results[0]?.transcript?.trim();
+    if (!transcript) return;
+
+    if (event.isFinal) {
+      setPrompt((current) => appendTranscript(current, transcript));
+      setPartialTranscript('');
+      return;
+    }
+
+    setPartialTranscript(transcript);
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    setListening(false);
+    setPartialTranscript('');
+    setVoiceError(event.message || `Voice input failed: ${event.error}`);
+  });
+
+  async function toggleVoiceInput() {
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+
+    const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!permission.granted) {
+      setVoiceError('Microphone and speech recognition permission are required for voice prompts.');
+      return;
+    }
+
+    setVoiceError(null);
+    ExpoSpeechRecognitionModule.start({
+      continuous: false,
+      interimResults: true,
+      lang: 'en-US',
+    });
+  }
+
+  async function submit() {
+    if (!prompt.trim()) return;
+    try {
+      setSubmitting(true);
+      const task = await apiFetch<TaskSummary>(apiUrl, apiToken, '/tasks', {
+        method: 'POST',
+        body: JSON.stringify({ prompt }),
+      });
+      setPrompt('');
+      Alert.alert('Task queued', task.title);
+    } catch (err) {
+      Alert.alert('Task failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.header}>
+        <Text style={styles.label}>Instruction</Text>
+        <Pressable
+          onPress={toggleVoiceInput}
+          style={({ pressed }) => [styles.voiceButton, listening && styles.voiceButtonActive, pressed && styles.buttonPressed]}
+        >
+          <Text style={styles.voiceButtonText}>{listening ? 'Stop voice' : 'Speak prompt'}</Text>
+        </Pressable>
+      </View>
+
+      <TextInput
+        multiline
+        onChangeText={setPrompt}
+        placeholder="Tell Hermes what to do..."
+        placeholderTextColor={colors.muted}
+        style={styles.input}
+        value={prompt}
+      />
+
+      {listening ? <Text style={styles.listening}>Listening… speak your Hermes instruction now.</Text> : null}
+      {partialTranscript ? <Text style={styles.partial}>Heard: {partialTranscript}</Text> : null}
+      {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
+
+      <Pressable
+        disabled={!prompt.trim() || submitting || !apiToken}
+        onPress={submit}
+        style={({ pressed }) => [
+          styles.button,
+          (!prompt.trim() || submitting || !apiToken) && styles.buttonDisabled,
+          pressed && styles.buttonPressed,
+        ]}
+      >
+        <Text style={styles.buttonText}>{submitting ? 'Submitting…' : 'Start Hermes task'}</Text>
+      </Pressable>
+      {!apiToken ? <Text style={styles.help}>Configure your API token in Settings first.</Text> : null}
+      <Text style={styles.help}>Use voice dictation or type directly. Voice transcription stays on-device/OS-level through the phone speech service.</Text>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: 18,
+    padding: spacing.lg,
+  },
+  buttonDisabled: {
+    opacity: 0.45,
+  },
+  buttonPressed: {
+    opacity: 0.8,
+  },
+  buttonText: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  container: {
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+  },
+  help: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  input: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
+    minHeight: 180,
+    padding: spacing.lg,
+    textAlignVertical: 'top',
+  },
+  label: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  listening: {
+    color: colors.warning,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  partial: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    padding: spacing.md,
+  },
+  voiceButton: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  voiceButtonActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  voiceButtonText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+});
