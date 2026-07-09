@@ -135,7 +135,7 @@ def verify_maestro() -> None:
     env = android_env()
     env.setdefault("MAESTRO_CLI_NO_ANALYTICS", "true")
     env.setdefault("MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED", "true")
-    for flow in [".maestro/smoke.yaml", ".maestro/settings.yaml"]:
+    for flow in [".maestro/smoke.yaml", ".maestro/settings.yaml", ".maestro/new-task.yaml"]:
         run(f"Maestro UI flow: {flow}", [maestro_command(), "test", flow], ROOT, env)
 
 

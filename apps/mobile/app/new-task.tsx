@@ -114,6 +114,7 @@ export default function NewTaskScreen() {
         placeholder="Tell Hermes what to do..."
         placeholderTextColor={colors.muted}
         style={styles.input}
+        testID="new-task-prompt"
         value={prompt}
       />
 
