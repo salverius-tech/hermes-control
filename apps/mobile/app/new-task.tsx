@@ -8,6 +8,7 @@ import { apiFetch, TaskSummary } from '@/api/client';
 import { clearTaskDraft, loadTaskDraft, saveTaskDraft } from '@/features/tasks/draft';
 import { appendTranscript } from '@/features/tasks/prompt';
 import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/features/tasks/request';
+import { applyPromptTemplate, promptTemplates } from '@/features/tasks/templates';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useSettingsStore } from '@/state/settings';
 import { colors, spacing } from '@/theme/tokens';
@@ -150,6 +151,22 @@ export default function NewTaskScreen() {
         testID="new-task-prompt"
         value={prompt}
       />
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Templates</Text>
+        <View style={styles.templateRow}>
+          {promptTemplates.map((template) => (
+            <Pressable
+              key={template.id}
+              onPress={() => setPrompt((current) => applyPromptTemplate(current, template.prompt))}
+              style={({ pressed }) => [styles.templateChip, pressed && styles.buttonPressed]}
+              testID={`new-task-template-${template.id}`}
+            >
+              <Text style={styles.templateText}>{template.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
 
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Project</Text>
@@ -344,6 +361,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+  },
+  templateChip: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  templateRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  templateText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
   },
   voiceButton: {
     backgroundColor: colors.surface,
