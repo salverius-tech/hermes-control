@@ -34,6 +34,7 @@ def test_task_create_request_defaults_project_and_priority():
     assert request.prompt == "Run the nightly maintenance checks"
     assert request.project_id == "default"
     assert request.priority == "normal"
+    assert request.requires_approval is False
 
 
 def test_task_summary_accepts_supported_statuses():

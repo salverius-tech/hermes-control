@@ -24,6 +24,15 @@ def create_app() -> FastAPI:
     async def broadcast_task_update(task: TaskSummary) -> None:
         await connections.broadcast_task_updated(task)
 
+    def request_from_task(task: TaskSummary, *, requires_approval: bool | None = None) -> TaskCreateRequest:
+        return TaskCreateRequest(
+            prompt=task.prompt,
+            project_id=task.project_id,
+            priority=task.priority,
+            source=task.source,
+            requires_approval=task.requires_approval if requires_approval is None else requires_approval,
+        )
+
     @app.get("/health")
     def health() -> dict[str, bool]:
         return {"ok": True}
@@ -46,7 +55,26 @@ def create_app() -> FastAPI:
     async def create_task(request: TaskCreateRequest) -> TaskSummary:
         task = await task_service.submit_task(request, on_update=broadcast_task_update)
         await connections.broadcast_task_created(task)
-        task_service.start_task(task, request, on_update=broadcast_task_update)
+        if not request.requires_approval:
+            task_service.start_task(task, request, on_update=broadcast_task_update)
+        return task
+
+    @app.post("/tasks/{task_id}/approve", dependencies=[Depends(require_auth)])
+    async def approve_task(task_id: str) -> TaskSummary:
+        original = projection.get_task(task_id)
+        if original is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        task = projection.approve_task(task_id)
+        await connections.broadcast_task_updated(task)
+        task_service.start_task(task, request_from_task(task, requires_approval=False), on_update=broadcast_task_update)
+        return task
+
+    @app.post("/tasks/{task_id}/reject", dependencies=[Depends(require_auth)])
+    async def reject_task(task_id: str) -> TaskSummary:
+        if projection.get_task(task_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        task = projection.reject_task(task_id)
+        await connections.broadcast_task_updated(task)
         return task
 
     @app.post("/tasks/{task_id}/cancel", dependencies=[Depends(require_auth)])
@@ -63,15 +91,11 @@ def create_app() -> FastAPI:
         if original is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
-        request = TaskCreateRequest(
-            prompt=original.prompt,
-            project_id=original.project_id,
-            priority=original.priority,
-            source=original.source,
-        )
+        request = request_from_task(original)
         task = await task_service.submit_task(request, on_update=broadcast_task_update)
         await connections.broadcast_task_created(task)
-        task_service.start_task(task, request, on_update=broadcast_task_update)
+        if not request.requires_approval:
+            task_service.start_task(task, request, on_update=broadcast_task_update)
         return task
 
     @app.get("/tasks/{task_id}", dependencies=[Depends(require_auth)])

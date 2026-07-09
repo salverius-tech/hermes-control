@@ -58,18 +58,22 @@ export default function TaskDetailScreen() {
     };
   }, [apiToken, apiUrl, taskId]);
 
-  async function cancelTask() {
+  async function refreshTaskCache(updated: TaskSummary) {
     if (!taskId) return;
+    setTask(updated);
+    const eventResult = await apiFetch<TaskEvent[]>(apiUrl, apiToken, `/tasks/${taskId}/events`);
+    setEvents(eventResult);
+    await writeCache(AsyncStorage, `tasks:${taskId}`, { events: eventResult, task: updated });
+  }
+
+  async function runTaskAction(path: string, failureMessage: string) {
     try {
       setActionPending(true);
       setError(null);
-      const canceled = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/cancel`, { method: 'POST' });
-      setTask(canceled);
-      const eventResult = await apiFetch<TaskEvent[]>(apiUrl, apiToken, `/tasks/${taskId}/events`);
-      setEvents(eventResult);
-      await writeCache(AsyncStorage, `tasks:${taskId}`, { events: eventResult, task: canceled });
+      const updated = await apiFetch<TaskSummary>(apiUrl, apiToken, path, { method: 'POST' });
+      await refreshTaskCache(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel task');
+      setError(err instanceof Error ? err.message : failureMessage);
     } finally {
       setActionPending(false);
     }
@@ -89,7 +93,8 @@ export default function TaskDetailScreen() {
     }
   }
 
-  const canCancel = task?.status === 'queued' || task?.status === 'running';
+  const canApprove = task?.status === 'awaiting_approval';
+  const canCancel = task?.status === 'queued' || task?.status === 'running' || task?.status === 'awaiting_approval';
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}> 
@@ -104,11 +109,33 @@ export default function TaskDetailScreen() {
               <Text style={styles.project}>{task.project_id}</Text>
             </View>
             <View style={styles.actions}>
+              {canApprove ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={actionPending}
+                    onPress={() => runTaskAction(`/tasks/${taskId}/approve`, 'Failed to approve task')}
+                    style={[styles.button, actionPending && styles.disabledButton]}
+                    testID="task-approve"
+                  >
+                    <Text style={styles.buttonText}>Approve</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={actionPending}
+                    onPress={() => runTaskAction(`/tasks/${taskId}/reject`, 'Failed to reject task')}
+                    style={[styles.button, styles.cancelButton, actionPending && styles.disabledButton]}
+                    testID="task-reject"
+                  >
+                    <Text style={styles.buttonText}>Reject</Text>
+                  </Pressable>
+                </>
+              ) : null}
               {canCancel ? (
                 <Pressable
                   accessibilityRole="button"
                   disabled={actionPending}
-                  onPress={cancelTask}
+                  onPress={() => runTaskAction(`/tasks/${taskId}/cancel`, 'Failed to cancel task')}
                   style={[styles.button, styles.cancelButton, actionPending && styles.disabledButton]}
                   testID="task-cancel"
                 >
@@ -170,6 +197,7 @@ export default function TaskDetailScreen() {
 const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.md,
   },
@@ -182,7 +210,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.primary,
     borderRadius: 12,
-    flex: 1,
+    flexGrow: 1,
+    minWidth: 96,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },

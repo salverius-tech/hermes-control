@@ -32,13 +32,21 @@ class TaskProjection:
             project_id=request.project_id,
             source=request.source,
             priority=request.priority,
-            status=TaskStatus.QUEUED,
+            requires_approval=request.requires_approval,
+            status=TaskStatus.AWAITING_APPROVAL if request.requires_approval else TaskStatus.QUEUED,
             created_at=now,
             updated_at=now,
         )
         self._tasks[task_id] = task
         self._save(task)
-        self.record_event(task_id, event_type="task.created", status=TaskStatus.QUEUED, message="Task queued")
+        self.record_event(task_id, event_type="task.created", status=TaskStatus(task.status), message="Task created")
+        if request.requires_approval:
+            self.record_event(
+                task_id,
+                event_type="task.approval_requested",
+                status=TaskStatus.AWAITING_APPROVAL,
+                message="Task is waiting for approval",
+            )
         return task
 
     def list_tasks(self) -> list[TaskSummary]:
@@ -53,6 +61,22 @@ class TaskProjection:
             status=TaskStatus.CANCELED,
             progress_message="Task canceled from mobile control",
             event_type="task.canceled",
+        )
+
+    def approve_task(self, task_id: str) -> TaskSummary:
+        return self.update_task(
+            task_id,
+            status=TaskStatus.QUEUED,
+            progress_message="Task approved from mobile control",
+            event_type="task.approved",
+        )
+
+    def reject_task(self, task_id: str) -> TaskSummary:
+        return self.update_task(
+            task_id,
+            status=TaskStatus.REJECTED,
+            progress_message="Task rejected from mobile control",
+            event_type="task.rejected",
         )
 
     def list_task_events(self, task_id: str) -> list[TaskEvent]:
@@ -119,10 +143,12 @@ class TaskProjection:
                 ProjectSummary(
                     project_id=project_id,
                     name=self._project_name(project_id),
-                    queued_count=status_counts[TaskStatus.QUEUED],
+                    queued_count=status_counts[TaskStatus.QUEUED] + status_counts[TaskStatus.AWAITING_APPROVAL],
                     running_count=status_counts[TaskStatus.RUNNING],
                     completed_count=status_counts[TaskStatus.COMPLETED],
-                    failed_count=status_counts[TaskStatus.FAILED] + status_counts[TaskStatus.CANCELED],
+                    failed_count=status_counts[TaskStatus.FAILED]
+                    + status_counts[TaskStatus.CANCELED]
+                    + status_counts[TaskStatus.REJECTED],
                 )
             )
         if not projects:

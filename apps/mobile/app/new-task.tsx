@@ -1,6 +1,6 @@
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, TaskSummary } from '@/api/client';
@@ -13,6 +13,7 @@ export default function NewTaskScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
   const [prompt, setPrompt] = useState('');
+  const [requiresApproval, setRequiresApproval] = useState(false);
   const [partialTranscript, setPartialTranscript] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -74,10 +75,11 @@ export default function NewTaskScreen() {
       setSubmitting(true);
       const task = await apiFetch<TaskSummary>(apiUrl, apiToken, '/tasks', {
         method: 'POST',
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, requires_approval: requiresApproval }),
       });
       setPrompt('');
-      Alert.alert('Task queued', task.title);
+      setRequiresApproval(false);
+      Alert.alert(task.requires_approval ? 'Approval requested' : 'Task queued', task.title);
     } catch (err) {
       Alert.alert('Task failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -110,6 +112,19 @@ export default function NewTaskScreen() {
         value={prompt}
       />
 
+      <View style={styles.approvalRow}>
+        <View style={styles.approvalCopy}>
+          <Text style={styles.approvalTitle}>Require approval before running</Text>
+          <Text style={styles.help}>Queue this task for review instead of executing immediately.</Text>
+        </View>
+        <Switch
+          onValueChange={setRequiresApproval}
+          testID="new-task-requires-approval"
+          thumbColor={requiresApproval ? colors.primary : colors.muted}
+          value={requiresApproval}
+        />
+      </View>
+
       {listening ? <Text style={styles.listening}>Listening… speak your Hermes instruction now.</Text> : null}
       {partialTranscript ? <Text style={styles.partial}>Heard: {partialTranscript}</Text> : null}
       {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
@@ -132,6 +147,25 @@ export default function NewTaskScreen() {
 }
 
 const styles = StyleSheet.create({
+  approvalCopy: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  approvalRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  approvalTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
   button: {
     backgroundColor: colors.primary,
     borderRadius: 18,

@@ -8,11 +8,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TaskStatus(StrEnum):
+    AWAITING_APPROVAL = "awaiting_approval"
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELED = "canceled"
+    REJECTED = "rejected"
 
 
 class TaskCreateRequest(BaseModel):
@@ -20,6 +22,7 @@ class TaskCreateRequest(BaseModel):
     project_id: str = "default"
     priority: Literal["low", "normal", "high"] = "normal"
     source: str = "mobile"
+    requires_approval: bool = False
 
     @field_validator("prompt")
     @classmethod
@@ -48,6 +51,7 @@ class TaskSummary(BaseModel):
     project_id: str = "default"
     source: str = "mobile"
     priority: Literal["low", "normal", "high"] = "normal"
+    requires_approval: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     progress_log: list[str] = Field(default_factory=list)

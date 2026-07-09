@@ -82,7 +82,8 @@ Request:
   "prompt": "Check Hermes status",
   "project_id": "default",
   "source": "mobile",
-  "priority": "normal"
+  "priority": "normal",
+  "requires_approval": false
 }
 ```
 
@@ -91,8 +92,33 @@ Validation:
 - `prompt` must not be blank.
 - `project_id` must not be blank.
 - `priority` must be `low`, `normal`, or `high`.
+- `requires_approval` defaults to `false`; when `true`, the task starts as `awaiting_approval` and is not executed until approved.
 
 Response: `201 Created` with the initial queued `TaskSummary`.
+
+### `POST /tasks/{task_id}/approve`
+
+Approves a task in `awaiting_approval`, records `task.approved`, broadcasts `task.updated`, and starts execution through the configured adapter.
+
+Auth: required.
+
+Response: `200 OK` with the updated `TaskSummary` whose status moves back to `queued` before execution begins.
+
+Errors:
+
+- `404` when the task id is unknown.
+
+### `POST /tasks/{task_id}/reject`
+
+Rejects an approval-required task, records `task.rejected`, and broadcasts `task.updated`.
+
+Auth: required.
+
+Response: `200 OK` with the updated `TaskSummary` whose `status` is `rejected`.
+
+Errors:
+
+- `404` when the task id is unknown.
 
 ### `GET /tasks/{task_id}`
 
@@ -118,7 +144,7 @@ Errors:
 
 ### `POST /tasks/{task_id}/retry`
 
-Creates a new queued task using the original task prompt, project, priority, and source, then starts it through the configured execution adapter.
+Creates a new task using the original task prompt, project, priority, source, and approval requirement. Tasks that still require approval remain `awaiting_approval`; other tasks start through the configured execution adapter.
 
 Auth: required.
 
@@ -198,7 +224,7 @@ Broadcast after successful `POST /tasks` before execution updates:
 
 ### Task updated
 
-Broadcast when execution starts, records progress, completes, fails, or is canceled:
+Broadcast when execution starts, records progress, completes, fails, waits for approval, is approved/rejected, or is canceled:
 
 ```json
 {
