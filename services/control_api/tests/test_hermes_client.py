@@ -1,6 +1,8 @@
+import sys
+
 import pytest
 
-from services.control_api.hermes_client import FakeHermesExecutor, HermesTaskService
+from services.control_api.hermes_client import FakeHermesExecutor, HermesTaskService, LocalHermesCommandExecutor
 from services.control_api.models import TaskCreateRequest, TaskStatus
 from services.control_api.projection import TaskProjection
 
@@ -40,3 +42,40 @@ async def test_task_service_records_executor_failure():
     assert saved.status == TaskStatus.FAILED
     assert saved.error == "Hermes command failed"
     assert projection.list_task_events(task.task_id)[-1].event_type == "task.failed"
+
+
+@pytest.mark.anyio
+async def test_local_command_executor_sends_prompt_on_stdin_and_captures_stderr_logs():
+    executor = LocalHermesCommandExecutor(
+        (
+            sys.executable,
+            "-c",
+            "import sys; prompt=sys.stdin.read(); print('result:' + prompt); print('log:accepted', file=sys.stderr)",
+        )
+    )
+
+    result = await executor.run(TaskCreateRequest(prompt="hello from mobile"))
+
+    assert result.result_summary == "result:hello from mobile"
+    assert result.log_messages == ["log:accepted"]
+
+
+@pytest.mark.anyio
+async def test_local_command_executor_raises_stderr_for_nonzero_exit():
+    executor = LocalHermesCommandExecutor(
+        (sys.executable, "-c", "import sys; print('bad command', file=sys.stderr); raise SystemExit(7)")
+    )
+
+    with pytest.raises(RuntimeError, match="bad command"):
+        await executor.run(TaskCreateRequest(prompt="fail"))
+
+
+@pytest.mark.anyio
+async def test_local_command_executor_times_out():
+    executor = LocalHermesCommandExecutor(
+        (sys.executable, "-c", "import time; time.sleep(10)"),
+        timeout_seconds=0.05,
+    )
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        await executor.run(TaskCreateRequest(prompt="timeout"))
