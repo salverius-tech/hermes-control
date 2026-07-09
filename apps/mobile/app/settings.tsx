@@ -14,10 +14,17 @@ export default function SettingsScreen() {
   const [draftUrl, setDraftUrl] = useState(apiUrl);
   const [draftToken, setDraftToken] = useState(apiToken);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   async function saveSettings() {
-    await save({ apiUrl: draftUrl.trim(), apiToken: draftToken.trim() });
-    Alert.alert('Settings saved');
+    setSaveMessage('Saving settings...');
+    try {
+      await save({ apiUrl: draftUrl.trim(), apiToken: draftToken.trim() });
+      setSaveMessage('Settings saved');
+    } catch (err) {
+      setSaveMessage('Settings failed');
+      Alert.alert('Settings failed', err instanceof Error ? err.message : 'Unknown error');
+    }
   }
 
   async function checkConnection() {
@@ -39,7 +46,10 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.label}>Control API URL</Text>
       <TextInput autoCapitalize="none" onChangeText={setDraftUrl} style={styles.input} testID="settings-api-url" value={draftUrl} />
       <Text style={styles.label}>API token</Text>
@@ -47,6 +57,11 @@ export default function SettingsScreen() {
       <Pressable onPress={saveSettings} style={styles.primaryButton} testID="settings-save">
         <Text style={styles.buttonText}>Save settings</Text>
       </Pressable>
+      {saveMessage ? (
+        <Text accessibilityLiveRegion="polite" style={styles.success} testID="settings-save-message">
+          {saveMessage}
+        </Text>
+      ) : null}
       <Pressable onPress={checkConnection} style={styles.secondaryButton} testID="settings-test-connection">
         <Text style={styles.buttonText}>Test connection</Text>
       </Pressable>
@@ -109,5 +124,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     padding: spacing.lg,
+  },
+  success: {
+    color: colors.success,
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

@@ -6,6 +6,13 @@ appId: com.anonymous.hermesmobilecontrol
 - assertVisible: "New Task"
 - assertVisible:
     id: "new-task-prompt"
+- assertVisible: "Templates"
+- assertVisible:
+    id: "new-task-template-review-changes"
+- assertVisible:
+    id: "new-task-template-run-tests"
+- assertVisible:
+    id: "new-task-template-summarize-repo"
 - assertVisible:
     id: "new-task-project-id"
 - assertVisible:
@@ -17,17 +24,7 @@ appId: com.anonymous.hermesmobilecontrol
 - assertVisible:
     id: "new-task-requires-approval"
 - tapOn:
-    id: "new-task-project-id"
-- eraseText
-- inputText: "ops"
-- tapOn:
-    id: "new-task-priority-high"
-- tapOn:
-    id: "new-task-requires-approval"
-- tapOn:
-    id: "new-task-prompt"
-- inputText: "Review Maestro new task controls"
-- assertVisible: "Start Hermes task"
+    id: "new-task-template-run-tests"
 - tapOn:
     id: "nav-home"
 - assertVisible: "Hermes Control"

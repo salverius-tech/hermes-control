@@ -24,8 +24,9 @@ appId: com.anonymous.hermesmobilecontrol
 - inputText: "dev-token"
 - tapOn:
     id: "settings-save"
-- assertVisible: "Settings saved"
-- tapOn: "OK"
+- assertVisible:
+    id: "settings-save-message"
+- hideKeyboard
 - tapOn:
     id: "nav-home"
 - assertVisible: "Hermes Control"
