@@ -1,9 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, TaskSummary } from '@/api/client';
+import { clearTaskDraft, loadTaskDraft, saveTaskDraft } from '@/features/tasks/draft';
 import { appendTranscript } from '@/features/tasks/prompt';
 import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/features/tasks/request';
 import { bottomNavigationHeight } from '@/navigation/constants';
@@ -21,6 +23,35 @@ export default function NewTaskScreen() {
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const skipNextDraftSave = useRef(false);
+
+  useEffect(() => {
+    let mounted = true;
+    loadTaskDraft(AsyncStorage)
+      .then((draft) => {
+        if (!mounted || draft === null) return;
+        setPrompt(draft.prompt);
+        setProjectId(draft.projectId);
+        setPriority(draft.priority);
+        setRequiresApproval(draft.requiresApproval);
+      })
+      .finally(() => {
+        if (mounted) setDraftLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    if (skipNextDraftSave.current) {
+      skipNextDraftSave.current = false;
+      return;
+    }
+    void saveTaskDraft(AsyncStorage, { prompt, projectId, priority, requiresApproval });
+  }, [draftLoaded, priority, projectId, prompt, requiresApproval]);
 
   useSpeechRecognitionEvent('start', () => {
     setVoiceError(null);
@@ -81,6 +112,8 @@ export default function NewTaskScreen() {
         method: 'POST',
         body: JSON.stringify(request),
       });
+      await clearTaskDraft(AsyncStorage);
+      skipNextDraftSave.current = true;
       setPrompt('');
       setProjectId(request.project_id);
       setRequiresApproval(false);
