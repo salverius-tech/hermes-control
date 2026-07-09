@@ -24,8 +24,10 @@ export function BottomNavigation() {
                   testID={`nav-${item.label.toLowerCase()}`}
                   style={({ pressed }) => [styles.item, active && styles.activeItem, pressed && styles.pressed]}
                 >
-                  <Feather color={active ? colors.text : colors.muted} name={item.iconName} size={28} />
-                  <Text style={[styles.label, active && styles.activeText]}>{item.label}</Text>
+                  <View style={styles.stack}>
+                    <Feather color={active ? colors.text : colors.muted} name={item.iconName} size={28} style={styles.icon} />
+                    <Text style={[styles.label, active && styles.activeText]}>{item.label}</Text>
+                  </View>
                 </Pressable>
               </Link>
             </View>
@@ -58,12 +60,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 16,
   },
+  icon: {
+    textAlign: 'center',
+    width: '100%',
+  },
   item: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     borderColor: 'transparent',
     borderRadius: 18,
     borderWidth: 1,
-    gap: 2,
     height: '100%',
     justifyContent: 'center',
     width: '100%',
@@ -73,6 +78,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     textAlign: 'center',
+    width: '100%',
   },
   pressed: {
     opacity: 0.78,
@@ -89,5 +95,11 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     paddingHorizontal: spacing.xs,
+  },
+  stack: {
+    alignItems: 'stretch',
+    gap: 2,
+    justifyContent: 'center',
+    width: '100%',
   },
 });
