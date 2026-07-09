@@ -1,6 +1,6 @@
 import { buildApiUrl } from './url';
 
-export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled';
 
 export type TaskSummary = {
   task_id: string;

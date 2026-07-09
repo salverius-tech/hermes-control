@@ -12,6 +12,7 @@ class TaskStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELED = "canceled"
 
 
 class TaskCreateRequest(BaseModel):

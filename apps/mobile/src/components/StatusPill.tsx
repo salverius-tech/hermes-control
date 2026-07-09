@@ -2,13 +2,14 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/theme/tokens';
 
-export type StatusKind = 'queued' | 'running' | 'completed' | 'failed' | 'idle' | 'offline';
+export type StatusKind = 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'idle' | 'offline';
 
 const statusColor: Record<StatusKind, string> = {
   queued: colors.warning,
   running: colors.primary,
   completed: colors.success,
   failed: colors.danger,
+  canceled: colors.muted,
   idle: colors.success,
   offline: colors.muted,
 };

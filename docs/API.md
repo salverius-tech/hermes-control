@@ -104,6 +104,30 @@ Errors:
 
 - `404` when the task id is unknown.
 
+### `POST /tasks/{task_id}/cancel`
+
+Marks an existing task as canceled, records a `task.canceled` event, and broadcasts `task.updated`.
+
+Auth: required.
+
+Response: `200 OK` with the updated `TaskSummary` whose `status` is `canceled`.
+
+Errors:
+
+- `404` when the task id is unknown.
+
+### `POST /tasks/{task_id}/retry`
+
+Creates a new queued task using the original task prompt, project, priority, and source, then starts it through the configured execution adapter.
+
+Auth: required.
+
+Response: `201 Created` with the new queued `TaskSummary`.
+
+Errors:
+
+- `404` when the original task id is unknown.
+
 ### `GET /tasks/{task_id}/events`
 
 Returns the persisted event timeline for a task.
@@ -174,7 +198,7 @@ Broadcast after successful `POST /tasks` before execution updates:
 
 ### Task updated
 
-Broadcast when execution starts, records progress, completes, or fails:
+Broadcast when execution starts, records progress, completes, fails, or is canceled:
 
 ```json
 {

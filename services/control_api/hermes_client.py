@@ -120,6 +120,9 @@ class HermesTaskService:
         *,
         on_update: TaskUpdateCallback | None = None,
     ) -> TaskSummary:
+        current = self.projection.get_task(task_id)
+        if current is not None and TaskStatus(current.status) == TaskStatus.CANCELED:
+            return current
         running = self.projection.update_task(
             task_id,
             status=TaskStatus.RUNNING,
@@ -139,9 +142,16 @@ class HermesTaskService:
 
         latest = running
         for message in result.log_messages:
+            current = self.projection.get_task(task_id)
+            if current is not None and TaskStatus(current.status) == TaskStatus.CANCELED:
+                return current
             latest = self.projection.update_task(task_id, progress_message=message, event_type="task.progress")
             if on_update is not None:
                 await on_update(latest)
+
+        current = self.projection.get_task(task_id)
+        if current is not None and TaskStatus(current.status) == TaskStatus.CANCELED:
+            return current
 
         completed = self.projection.update_task(
             task_id,

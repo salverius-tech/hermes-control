@@ -1,7 +1,7 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
@@ -14,6 +14,7 @@ import { colors, spacing } from '@/theme/tokens';
 
 export default function TaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
+  const router = useRouter();
   const { apiUrl, apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
   const [task, setTask] = useState<TaskSummary | null>(null);
@@ -21,6 +22,7 @@ export default function TaskDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionPending, setActionPending] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -56,6 +58,39 @@ export default function TaskDetailScreen() {
     };
   }, [apiToken, apiUrl, taskId]);
 
+  async function cancelTask() {
+    if (!taskId) return;
+    try {
+      setActionPending(true);
+      setError(null);
+      const canceled = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/cancel`, { method: 'POST' });
+      setTask(canceled);
+      const eventResult = await apiFetch<TaskEvent[]>(apiUrl, apiToken, `/tasks/${taskId}/events`);
+      setEvents(eventResult);
+      await writeCache(AsyncStorage, `tasks:${taskId}`, { events: eventResult, task: canceled });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel task');
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function retryTask() {
+    if (!taskId) return;
+    try {
+      setActionPending(true);
+      setError(null);
+      const retried = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/retry`, { method: 'POST' });
+      router.replace(`/tasks/${retried.task_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to retry task');
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  const canCancel = task?.status === 'queued' || task?.status === 'running';
+
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}> 
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
@@ -67,6 +102,28 @@ export default function TaskDetailScreen() {
             <View style={styles.statusRow}>
               <StatusPill status={task.status} />
               <Text style={styles.project}>{task.project_id}</Text>
+            </View>
+            <View style={styles.actions}>
+              {canCancel ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={actionPending}
+                  onPress={cancelTask}
+                  style={[styles.button, styles.cancelButton, actionPending && styles.disabledButton]}
+                  testID="task-cancel"
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                disabled={actionPending}
+                onPress={retryTask}
+                style={[styles.button, actionPending && styles.disabledButton]}
+                testID="task-retry"
+              >
+                <Text style={styles.buttonText}>Retry</Text>
+              </Pressable>
             </View>
           </MetricCard>
 
@@ -111,14 +168,38 @@ export default function TaskDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
   bodyText: {
     color: colors.text,
     fontSize: 15,
     lineHeight: 22,
   },
+  button: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  buttonText: {
+    color: colors.background,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  cancelButton: {
+    backgroundColor: colors.danger,
+  },
   container: {
     gap: spacing.md,
     padding: spacing.lg,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   error: {
     color: colors.danger,

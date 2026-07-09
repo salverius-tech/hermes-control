@@ -49,6 +49,31 @@ def create_app() -> FastAPI:
         task_service.start_task(task, request, on_update=broadcast_task_update)
         return task
 
+    @app.post("/tasks/{task_id}/cancel", dependencies=[Depends(require_auth)])
+    async def cancel_task(task_id: str) -> TaskSummary:
+        if projection.get_task(task_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        task = projection.cancel_task(task_id)
+        await connections.broadcast_task_updated(task)
+        return task
+
+    @app.post("/tasks/{task_id}/retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth)])
+    async def retry_task(task_id: str) -> TaskSummary:
+        original = projection.get_task(task_id)
+        if original is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+        request = TaskCreateRequest(
+            prompt=original.prompt,
+            project_id=original.project_id,
+            priority=original.priority,
+            source=original.source,
+        )
+        task = await task_service.submit_task(request, on_update=broadcast_task_update)
+        await connections.broadcast_task_created(task)
+        task_service.start_task(task, request, on_update=broadcast_task_update)
+        return task
+
     @app.get("/tasks/{task_id}", dependencies=[Depends(require_auth)])
     def get_task(task_id: str) -> TaskSummary:
         task = projection.get_task(task_id)

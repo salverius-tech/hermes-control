@@ -47,6 +47,14 @@ class TaskProjection:
     def get_task(self, task_id: str) -> TaskSummary | None:
         return self._tasks.get(task_id)
 
+    def cancel_task(self, task_id: str) -> TaskSummary:
+        return self.update_task(
+            task_id,
+            status=TaskStatus.CANCELED,
+            progress_message="Task canceled from mobile control",
+            event_type="task.canceled",
+        )
+
     def list_task_events(self, task_id: str) -> list[TaskEvent]:
         return sorted(self._events.get(task_id, []), key=lambda event: event.created_at)
 
@@ -114,7 +122,7 @@ class TaskProjection:
                     queued_count=status_counts[TaskStatus.QUEUED],
                     running_count=status_counts[TaskStatus.RUNNING],
                     completed_count=status_counts[TaskStatus.COMPLETED],
-                    failed_count=status_counts[TaskStatus.FAILED],
+                    failed_count=status_counts[TaskStatus.FAILED] + status_counts[TaskStatus.CANCELED],
                 )
             )
         if not projects:
