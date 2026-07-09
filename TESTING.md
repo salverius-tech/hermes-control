@@ -74,7 +74,7 @@ Device UI smoke coverage is provided by Maestro:
 python scripts/verify.py --maestro
 ```
 
-The Maestro flow lives at `.maestro/smoke.yaml`. It launches the installed app, verifies the dashboard, checks that redundant dashboard action buttons are absent, navigates through Home/Tasks/New/Projects/Settings, and returns Home through the bottom bar.
+The Maestro flows live under `.maestro/`. The smoke flow launches the installed app, verifies the dashboard, checks that redundant dashboard action buttons are absent, navigates through Home/Tasks/New/Projects/Settings, and returns Home through the bottom bar. The settings flow verifies stable selectors for API URL/token inputs and settings actions.
 
 ## Boundary tests
 

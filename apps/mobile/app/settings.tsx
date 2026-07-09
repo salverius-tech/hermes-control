@@ -41,16 +41,16 @@ export default function SettingsScreen() {
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
       <Text style={styles.label}>Control API URL</Text>
-      <TextInput autoCapitalize="none" onChangeText={setDraftUrl} style={styles.input} value={draftUrl} />
+      <TextInput autoCapitalize="none" onChangeText={setDraftUrl} style={styles.input} testID="settings-api-url" value={draftUrl} />
       <Text style={styles.label}>API token</Text>
-      <TextInput autoCapitalize="none" onChangeText={setDraftToken} secureTextEntry style={styles.input} value={draftToken} />
-      <Pressable onPress={saveSettings} style={styles.primaryButton}>
+      <TextInput autoCapitalize="none" onChangeText={setDraftToken} secureTextEntry style={styles.input} testID="settings-api-token" value={draftToken} />
+      <Pressable onPress={saveSettings} style={styles.primaryButton} testID="settings-save">
         <Text style={styles.buttonText}>Save settings</Text>
       </Pressable>
-      <Pressable onPress={checkConnection} style={styles.secondaryButton}>
+      <Pressable onPress={checkConnection} style={styles.secondaryButton} testID="settings-test-connection">
         <Text style={styles.buttonText}>Test connection</Text>
       </Pressable>
-      <Pressable disabled={!draftToken.trim()} onPress={loadDiagnostics} style={[styles.secondaryButton, !draftToken.trim() && styles.buttonDisabled]}>
+      <Pressable disabled={!draftToken.trim()} onPress={loadDiagnostics} style={[styles.secondaryButton, !draftToken.trim() && styles.buttonDisabled]} testID="settings-load-diagnostics">
         <Text style={styles.buttonText}>Load diagnostics</Text>
       </Pressable>
       {diagnostics ? (

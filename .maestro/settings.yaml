@@ -1,0 +1,31 @@
+appId: com.anonymous.hermesmobilecontrol
+---
+- launchApp
+- tapOn:
+    id: "header-settings"
+- assertVisible: "Settings"
+- assertVisible:
+    id: "settings-api-url"
+- assertVisible:
+    id: "settings-api-token"
+- assertVisible:
+    id: "settings-save"
+- assertVisible:
+    id: "settings-test-connection"
+- assertVisible:
+    id: "settings-load-diagnostics"
+- tapOn:
+    id: "settings-api-url"
+- eraseText
+- inputText: "http://127.0.0.1:8787"
+- tapOn:
+    id: "settings-api-token"
+- eraseText
+- inputText: "dev-token"
+- tapOn:
+    id: "settings-save"
+- assertVisible: "Settings saved"
+- tapOn: "OK"
+- tapOn:
+    id: "nav-home"
+- assertVisible: "Hermes Control"
