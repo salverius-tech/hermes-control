@@ -27,9 +27,9 @@ Authorization: Bearer <CONTROL_API_TOKEN>
 
 ## Current integration boundary
 
-`HermesTaskService` currently records queued tasks through the projection layer. Set `CONTROL_API_DB_PATH` to persist task state in SQLite across API restarts; omit it for in-memory development mode.
+`HermesTaskService` records task state through the projection layer. Set `CONTROL_API_DB_PATH` to persist task state in SQLite across API restarts; omit it for in-memory development mode.
 
-Real Hermes execution is still intentionally behind the `HermesTaskService` seam. A future adapter can call Hermes CLI, Hermes API Server, the gateway, or another local integration surface without changing mobile-facing contracts.
+Real Hermes execution is intentionally behind the `HermesTaskService` seam. Set `CONTROL_API_HERMES_COMMAND` to run a local Hermes-compatible command; the prompt is sent on stdin, stdout/stderr lines are recorded as live task progress, and active subprocesses are terminated when the task is canceled.
 
 ## More detail
 

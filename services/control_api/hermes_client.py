@@ -17,8 +17,11 @@ class HermesExecutionResult:
     log_messages: list[str] = field(default_factory=list)
 
 
+TaskLogCallback = Callable[[str], Awaitable[None]]
+
+
 class HermesExecutor(Protocol):
-    async def run(self, request: TaskCreateRequest) -> HermesExecutionResult: ...
+    async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult: ...
 
 
 class TaskNotifier(Protocol):
@@ -37,7 +40,7 @@ class FakeHermesExecutor:
     log_messages: list[str] = field(default_factory=list)
     error: str | None = None
 
-    async def run(self, request: TaskCreateRequest) -> HermesExecutionResult:
+    async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult:
         if self.error is not None:
             raise RuntimeError(self.error)
         return HermesExecutionResult(result_summary=self.result_summary, log_messages=self.log_messages)
@@ -56,18 +59,44 @@ class LocalHermesCommandExecutor:
     command: tuple[str, ...]
     timeout_seconds: float = 900
 
-    async def run(self, request: TaskCreateRequest) -> HermesExecutionResult:
+    async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult:
         process = await asyncio.create_subprocess_exec(
             *self.command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        async def read_stream(stream: asyncio.StreamReader | None, sink: list[str]) -> None:
+            if stream is None:
+                return
+            while True:
+                line = await stream.readline()
+                if not line:
+                    return
+                message = line.decode("utf-8", errors="replace").rstrip("\r\n")
+                if not message:
+                    continue
+                sink.append(message)
+                if on_log is not None:
+                    await on_log(message)
+
+        async def run_process() -> None:
+            assert process.stdin is not None
+            process.stdin.write(request.prompt.encode("utf-8"))
+            await process.stdin.drain()
+            process.stdin.close()
+            readers = [
+                asyncio.create_task(read_stream(process.stdout, stdout_lines)),
+                asyncio.create_task(read_stream(process.stderr, stderr_lines)),
+            ]
+            await process.wait()
+            await asyncio.gather(*readers)
+
         try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(request.prompt.encode("utf-8")),
-                timeout=self.timeout_seconds,
-            )
+            await asyncio.wait_for(run_process(), timeout=self.timeout_seconds)
         except TimeoutError as exc:
             process.kill()
             await process.wait()
@@ -77,13 +106,13 @@ class LocalHermesCommandExecutor:
             await process.wait()
             raise
 
-        stdout_text = stdout.decode("utf-8", errors="replace").strip()
-        stderr_text = stderr.decode("utf-8", errors="replace").strip()
+        stdout_text = "\n".join(stdout_lines).strip()
+        stderr_text = "\n".join(stderr_lines).strip()
         if process.returncode != 0:
             detail = stderr_text or stdout_text or f"Hermes command exited with {process.returncode}"
             raise RuntimeError(detail)
 
-        logs = [line for line in stderr_text.splitlines() if line]
+        logs = [] if on_log is not None else stderr_lines
         return HermesExecutionResult(result_summary=stdout_text or "Hermes command completed", log_messages=logs)
 
 
@@ -170,8 +199,19 @@ class HermesTaskService:
         if on_update is not None:
             await on_update(running)
 
+        latest = running
+
+        async def record_progress(message: str) -> None:
+            nonlocal latest
+            current = self.projection.get_task(task_id)
+            if current is not None and TaskStatus(current.status) == TaskStatus.CANCELED:
+                raise asyncio.CancelledError
+            latest = self.projection.update_task(task_id, progress_message=message, event_type="task.progress")
+            if on_update is not None:
+                await on_update(latest)
+
         try:
-            result = await self.executor.run(request)
+            result = await self.executor.run(request, on_log=record_progress)
         except asyncio.CancelledError:
             canceled = self.projection.get_task(task_id)
             if canceled is None or TaskStatus(canceled.status) != TaskStatus.CANCELED:

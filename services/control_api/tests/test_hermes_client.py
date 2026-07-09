@@ -3,7 +3,12 @@ import sys
 
 import pytest
 
-from services.control_api.hermes_client import FakeHermesExecutor, HermesTaskService, LocalHermesCommandExecutor
+from services.control_api.hermes_client import (
+    FakeHermesExecutor,
+    HermesExecutionResult,
+    HermesTaskService,
+    LocalHermesCommandExecutor,
+)
 from services.control_api.models import TaskCreateRequest, TaskStatus
 from services.control_api.projection import TaskProjection
 
@@ -16,13 +21,21 @@ class BlockingHermesExecutor:
         self.started = asyncio.Event()
         self.canceled = asyncio.Event()
 
-    async def run(self, request: TaskCreateRequest):
+    async def run(self, request: TaskCreateRequest, *, on_log=None):
         self.started.set()
         try:
             await asyncio.Event().wait()
         except asyncio.CancelledError:
             self.canceled.set()
             raise
+
+
+class StreamingHermesExecutor:
+    async def run(self, request: TaskCreateRequest, *, on_log=None) -> HermesExecutionResult:
+        assert on_log is not None
+        await on_log("streamed stdout")
+        await on_log("streamed stderr")
+        return HermesExecutionResult(result_summary="stream complete")
 
 
 @pytest.mark.anyio
@@ -77,6 +90,20 @@ async def test_task_service_cancels_active_executor_task():
 
 
 @pytest.mark.anyio
+async def test_task_service_records_streamed_executor_progress():
+    projection = TaskProjection()
+    service = HermesTaskService(projection=projection, executor=StreamingHermesExecutor())
+
+    task = await service.submit_task(TaskCreateRequest(prompt="Stream progress"), run_inline=True)
+
+    saved = projection.get_task(task.task_id)
+    assert saved is not None
+    assert saved.status == TaskStatus.COMPLETED
+    assert saved.progress_log == ["Hermes task started", "streamed stdout", "streamed stderr"]
+    assert saved.result_summary == "stream complete"
+
+
+@pytest.mark.anyio
 async def test_local_command_executor_sends_prompt_on_stdin_and_captures_stderr_logs():
     executor = LocalHermesCommandExecutor(
         (
@@ -111,3 +138,31 @@ async def test_local_command_executor_times_out():
 
     with pytest.raises(RuntimeError, match="timed out"):
         await executor.run(TaskCreateRequest(prompt="timeout"))
+
+
+@pytest.mark.anyio
+async def test_local_command_executor_streams_output_before_process_exits():
+    executor = LocalHermesCommandExecutor(
+        (
+            sys.executable,
+            "-c",
+            "import sys, time; print('stdout:first', flush=True); print('stderr:first', file=sys.stderr, flush=True); time.sleep(0.3); print('stdout:done', flush=True)",
+        )
+    )
+    seen_first_line = asyncio.Event()
+    progress_messages = []
+
+    async def record_progress(message: str) -> None:
+        progress_messages.append(message)
+        if message == "stdout:first":
+            seen_first_line.set()
+
+    run_task = asyncio.create_task(executor.run(TaskCreateRequest(prompt="stream"), on_log=record_progress))
+    await asyncio.wait_for(seen_first_line.wait(), timeout=1)
+
+    assert not run_task.done()
+    result = await run_task
+
+    assert "stdout:first" in progress_messages
+    assert "stderr:first" in progress_messages
+    assert result.result_summary == "stdout:first\nstdout:done"
