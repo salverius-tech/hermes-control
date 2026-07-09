@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shlex
 from dataclasses import dataclass, field
@@ -71,6 +72,10 @@ class LocalHermesCommandExecutor:
             process.kill()
             await process.wait()
             raise RuntimeError("Hermes command timed out") from exc
+        except asyncio.CancelledError:
+            process.kill()
+            await process.wait()
+            raise
 
         stdout_text = stdout.decode("utf-8", errors="replace").strip()
         stderr_text = stderr.decode("utf-8", errors="replace").strip()
@@ -102,6 +107,7 @@ class HermesTaskService:
     projection: TaskProjection
     executor: HermesExecutor = field(default_factory=executor_from_environment)
     notifier: TaskNotifier = field(default_factory=NullTaskNotifier)
+    _running_tasks: dict[str, asyncio.Task[TaskSummary]] = field(default_factory=dict, init=False)
 
     async def submit_task(
         self,
@@ -124,7 +130,26 @@ class HermesTaskService:
         *,
         on_update: TaskUpdateCallback | None = None,
     ) -> None:
-        asyncio.create_task(self._execute(task.task_id, request, on_update=on_update))
+        run_task = asyncio.create_task(self._execute(task.task_id, request, on_update=on_update))
+        self._running_tasks[task.task_id] = run_task
+        run_task.add_done_callback(lambda completed: self._running_tasks.pop(task.task_id, None))
+
+    async def cancel_task(
+        self,
+        task_id: str,
+        *,
+        on_update: TaskUpdateCallback | None = None,
+    ) -> TaskSummary:
+        canceled = self.projection.cancel_task(task_id)
+        running_task = self._running_tasks.pop(task_id, None)
+        if running_task is not None and not running_task.done():
+            running_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await running_task
+        await self.notify_task(canceled, event_type="task.canceled")
+        if on_update is not None:
+            await on_update(canceled)
+        return canceled
 
     async def _execute(
         self,
@@ -147,6 +172,13 @@ class HermesTaskService:
 
         try:
             result = await self.executor.run(request)
+        except asyncio.CancelledError:
+            canceled = self.projection.get_task(task_id)
+            if canceled is None or TaskStatus(canceled.status) != TaskStatus.CANCELED:
+                canceled = self.projection.cancel_task(task_id)
+            if on_update is not None:
+                await on_update(canceled)
+            return canceled
         except Exception as exc:  # noqa: BLE001 - boundary converts adapter failures to task state
             failed = self.projection.update_task(task_id, status=TaskStatus.FAILED, error=str(exc), event_type="task.failed")
             await self.notify_task(failed, event_type="task.failed")

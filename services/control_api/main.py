@@ -84,9 +84,7 @@ def create_app() -> FastAPI:
     async def cancel_task(task_id: str) -> TaskSummary:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-        task = projection.cancel_task(task_id)
-        await task_service.notify_task(task, event_type="task.canceled")
-        await connections.broadcast_task_updated(task)
+        task = await task_service.cancel_task(task_id, on_update=broadcast_task_update)
         return task
 
     @app.post("/tasks/{task_id}/retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth)])

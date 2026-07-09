@@ -1,3 +1,4 @@
+import asyncio
 import sys
 
 import pytest
@@ -8,6 +9,20 @@ from services.control_api.projection import TaskProjection
 
 
 pytestmark = pytest.mark.unit
+
+
+class BlockingHermesExecutor:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.canceled = asyncio.Event()
+
+    async def run(self, request: TaskCreateRequest):
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.canceled.set()
+            raise
 
 
 @pytest.mark.anyio
@@ -42,6 +57,23 @@ async def test_task_service_records_executor_failure():
     assert saved.status == TaskStatus.FAILED
     assert saved.error == "Hermes command failed"
     assert projection.list_task_events(task.task_id)[-1].event_type == "task.failed"
+
+
+@pytest.mark.anyio
+async def test_task_service_cancels_active_executor_task():
+    projection = TaskProjection()
+    executor = BlockingHermesExecutor()
+    service = HermesTaskService(projection=projection, executor=executor)
+    task = await service.submit_task(TaskCreateRequest(prompt="Stop this task"))
+
+    service.start_task(task, TaskCreateRequest(prompt="Stop this task"))
+    await asyncio.wait_for(executor.started.wait(), timeout=1)
+
+    canceled = await service.cancel_task(task.task_id)
+
+    assert canceled.status == TaskStatus.CANCELED
+    assert executor.canceled.is_set()
+    assert projection.list_task_events(task.task_id)[-1].event_type == "task.canceled"
 
 
 @pytest.mark.anyio
