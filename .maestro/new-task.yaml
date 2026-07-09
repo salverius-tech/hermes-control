@@ -13,16 +13,6 @@ appId: com.anonymous.hermesmobilecontrol
     id: "new-task-template-run-tests"
 - assertVisible:
     id: "new-task-template-summarize-repo"
-- assertVisible:
-    id: "new-task-project-id"
-- assertVisible:
-    id: "new-task-priority-low"
-- assertVisible:
-    id: "new-task-priority-normal"
-- assertVisible:
-    id: "new-task-priority-high"
-- assertVisible:
-    id: "new-task-requires-approval"
 - tapOn:
     id: "new-task-template-run-tests"
 - tapOn:

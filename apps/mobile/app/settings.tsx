@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, Diagnostics, testConnection } from '@/api/client';
+import { ActionButton } from '@/components/ActionButton';
 import { MetricCard } from '@/components/MetricCard';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useSettingsStore } from '@/state/settings';
@@ -54,20 +55,14 @@ export default function SettingsScreen() {
       <TextInput autoCapitalize="none" onChangeText={setDraftUrl} style={styles.input} testID="settings-api-url" value={draftUrl} />
       <Text style={styles.label}>API token</Text>
       <TextInput autoCapitalize="none" onChangeText={setDraftToken} secureTextEntry style={styles.input} testID="settings-api-token" value={draftToken} />
-      <Pressable onPress={saveSettings} style={styles.primaryButton} testID="settings-save">
-        <Text style={styles.buttonText}>Save settings</Text>
-      </Pressable>
+      <ActionButton label="Save settings" onPress={saveSettings} testID="settings-save" variant="primary" />
       {saveMessage ? (
         <Text accessibilityLiveRegion="polite" style={styles.success} testID="settings-save-message">
           {saveMessage}
         </Text>
       ) : null}
-      <Pressable onPress={checkConnection} style={styles.secondaryButton} testID="settings-test-connection">
-        <Text style={styles.buttonText}>Test connection</Text>
-      </Pressable>
-      <Pressable disabled={!draftToken.trim()} onPress={loadDiagnostics} style={[styles.secondaryButton, !draftToken.trim() && styles.buttonDisabled]} testID="settings-load-diagnostics">
-        <Text style={styles.buttonText}>Load diagnostics</Text>
-      </Pressable>
+      <ActionButton label="Test connection" onPress={checkConnection} testID="settings-test-connection" />
+      <ActionButton disabled={!draftToken.trim()} label="Load diagnostics" onPress={loadDiagnostics} testID="settings-load-diagnostics" />
       {diagnostics ? (
         <MetricCard title="Diagnostics" subtitle={`API ${diagnostics.version}`}>
           <Text style={styles.help}>Storage: {diagnostics.storage}</Text>
@@ -83,15 +78,6 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  buttonDisabled: {
-    opacity: 0.45,
-  },
-  buttonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
   container: {
     gap: spacing.md,
     padding: spacing.lg,
@@ -112,18 +98,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '800',
-  },
-  primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 18,
-    padding: spacing.lg,
-  },
-  secondaryButton: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: spacing.lg,
   },
   success: {
     color: colors.success,
