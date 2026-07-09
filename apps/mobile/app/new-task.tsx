@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, TaskSummary } from '@/api/client';
 import { appendTranscript } from '@/features/tasks/prompt';
+import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/features/tasks/request';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useSettingsStore } from '@/state/settings';
 import { colors, spacing } from '@/theme/tokens';
@@ -13,6 +14,8 @@ export default function NewTaskScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
   const [prompt, setPrompt] = useState('');
+  const [projectId, setProjectId] = useState('default');
+  const [priority, setPriority] = useState<TaskPriority>('normal');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [partialTranscript, setPartialTranscript] = useState('');
   const [listening, setListening] = useState(false);
@@ -73,11 +76,13 @@ export default function NewTaskScreen() {
     if (!prompt.trim()) return;
     try {
       setSubmitting(true);
+      const request = buildTaskCreateRequest({ prompt, projectId, priority, requiresApproval });
       const task = await apiFetch<TaskSummary>(apiUrl, apiToken, '/tasks', {
         method: 'POST',
-        body: JSON.stringify({ prompt, requires_approval: requiresApproval }),
+        body: JSON.stringify(request),
       });
       setPrompt('');
+      setProjectId(request.project_id);
       setRequiresApproval(false);
       Alert.alert(task.requires_approval ? 'Approval requested' : 'Task queued', task.title);
     } catch (err) {
@@ -111,6 +116,39 @@ export default function NewTaskScreen() {
         style={styles.input}
         value={prompt}
       />
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Project</Text>
+        <TextInput
+          autoCapitalize="none"
+          onChangeText={setProjectId}
+          placeholder="default"
+          placeholderTextColor={colors.muted}
+          style={styles.singleLineInput}
+          testID="new-task-project-id"
+          value={projectId}
+        />
+        <Text style={styles.help}>Use an existing project id or type a new one to group related tasks.</Text>
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Priority</Text>
+        <View style={styles.segmentedRow}>
+          {priorityOptions.map((option) => {
+            const selected = priority === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => setPriority(option.value)}
+                style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && styles.buttonPressed]}
+                testID={`new-task-priority-${option.value}`}
+              >
+                <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
 
       <View style={styles.approvalRow}>
         <View style={styles.approvalCopy}>
@@ -192,6 +230,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  fieldGroup: {
+    gap: spacing.sm,
+  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -234,6 +275,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     padding: spacing.md,
+  },
+  segment: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  segmentedRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  segmentSelected: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  segmentText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  segmentTextSelected: {
+    color: colors.text,
+  },
+  singleLineInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   voiceButton: {
     backgroundColor: colors.surface,
