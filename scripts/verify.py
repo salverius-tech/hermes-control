@@ -29,8 +29,8 @@ def project_python() -> str:
 def android_env() -> dict[str, str]:
     env = os.environ.copy()
     if os.name == "nt":
-        env["JAVA_HOME"] = r"C:\Program Files\Android\Android Studio\jbr"
-        env["ANDROID_HOME"] = r"C:\Users\jthol\AppData\Local\Android\Sdk"
+        env.setdefault("JAVA_HOME", r"C:\Program Files\Android\Android Studio\jbr")
+        env.setdefault("ANDROID_HOME", r"C:\Users\jthol\AppData\Local\Android\Sdk")
     else:
         env.setdefault("JAVA_HOME", r"C:\Program Files\Android\Android Studio\jbr")
         env.setdefault("ANDROID_HOME", r"C:\Users\jthol\AppData\Local\Android\Sdk")

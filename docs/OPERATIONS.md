@@ -58,6 +58,13 @@ Android release build:
 python scripts/verify.py --android
 ```
 
+GitHub Actions release APK artifact:
+
+1. Open the `verify` workflow in GitHub Actions.
+2. Choose **Run workflow**.
+3. Set `build_android=true`.
+4. Download the `hermes-mobile-control-release-apk` artifact after the run completes.
+
 Connected-device release install/launch check:
 
 ```bash

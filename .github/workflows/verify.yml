@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
     branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      build_android:
+        description: 'Build and upload Android release APK artifact'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   backend-and-mobile:
@@ -27,3 +34,19 @@ jobs:
         run: npm ci
       - name: Run canonical verifier
         run: python scripts/verify.py
+      - name: Set up Java for Android artifact build
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build Android release APK artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android }}
+        run: python scripts/verify.py --android
+      - name: Upload Android release APK
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_android }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-mobile-control-release-apk
+          path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

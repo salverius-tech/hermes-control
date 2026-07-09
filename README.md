@@ -93,6 +93,8 @@ python scripts/verify.py --maestro
 
 Maestro is installed from the official Windows-compatible ZIP release under `C:\Users\jthol\.maestro\maestro`; `scripts/verify.py` adds Android Studio's bundled JBR and Maestro to the verification environment.
 
+GitHub Actions can also build and retain a release APK from the **verify** workflow. Run it manually with `build_android=true`; the workflow uploads `hermes-mobile-control-release-apk` containing `app-release.apk`.
+
 See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-boundary test map.
 
 ## Documentation map
