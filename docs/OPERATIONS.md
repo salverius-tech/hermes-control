@@ -17,6 +17,14 @@ To execute submitted tasks with a local Hermes command, add `CONTROL_API_HERMES_
 CONTROL_API_HERMES_COMMAND='hermes chat -q'
 ```
 
+To send Discord webhook notifications for task approvals and terminal task states, add `CONTROL_API_DISCORD_WEBHOOK_URL` with a webhook URL stored outside source control.
+
+```bash
+CONTROL_API_DISCORD_WEBHOOK_URL='https://discord.com/api/webhooks/[REDACTED]'
+```
+
+Notifications are best-effort and never block task execution. The diagnostics endpoint reports `notification_mode` as `discord` when this value is configured and `disabled` otherwise.
+
 ## Mobile development
 
 ```bash

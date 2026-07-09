@@ -40,6 +40,7 @@ Auth: required.
   "storage": "sqlite",
   "schema_version": "1",
   "execution_mode": "command",
+  "notification_mode": "discord",
   "websocket_path": "/ws/events"
 }
 ```
@@ -254,3 +255,13 @@ CONTROL_API_HERMES_COMMAND='hermes chat -q'
 ```
 
 When unset, the API uses an unconfigured adapter that records a completed lifecycle explaining that real Hermes execution has not been configured.
+
+## Notifications
+
+Set `CONTROL_API_DISCORD_WEBHOOK_URL` to send best-effort Discord webhook notifications for approval requests, task completions, task failures, cancellations, and rejections.
+
+```bash
+CONTROL_API_DISCORD_WEBHOOK_URL='https://discord.com/api/webhooks/[REDACTED]'
+```
+
+Webhook URLs are secrets. Keep them out of source control. Notification failures are swallowed so task execution and API responses are not blocked by Discord availability.

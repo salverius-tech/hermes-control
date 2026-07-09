@@ -20,6 +20,16 @@ class HermesExecutor(Protocol):
     async def run(self, request: TaskCreateRequest) -> HermesExecutionResult: ...
 
 
+class TaskNotifier(Protocol):
+    async def notify_task(self, task: TaskSummary, *, event_type: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class NullTaskNotifier:
+    async def notify_task(self, task: TaskSummary, *, event_type: str) -> None:
+        return None
+
+
 @dataclass
 class FakeHermesExecutor:
     result_summary: str = "Hermes task completed"
@@ -91,6 +101,7 @@ class HermesTaskService:
 
     projection: TaskProjection
     executor: HermesExecutor = field(default_factory=executor_from_environment)
+    notifier: TaskNotifier = field(default_factory=NullTaskNotifier)
 
     async def submit_task(
         self,
@@ -100,6 +111,8 @@ class HermesTaskService:
         on_update: TaskUpdateCallback | None = None,
     ) -> TaskSummary:
         task = self.projection.create_task(request)
+        if TaskStatus(task.status) == TaskStatus.AWAITING_APPROVAL:
+            await self.notify_task(task, event_type="task.approval_requested")
         if run_inline:
             return await self._execute(task.task_id, request, on_update=on_update)
         return task
@@ -136,6 +149,7 @@ class HermesTaskService:
             result = await self.executor.run(request)
         except Exception as exc:  # noqa: BLE001 - boundary converts adapter failures to task state
             failed = self.projection.update_task(task_id, status=TaskStatus.FAILED, error=str(exc), event_type="task.failed")
+            await self.notify_task(failed, event_type="task.failed")
             if on_update is not None:
                 await on_update(failed)
             return failed
@@ -159,6 +173,13 @@ class HermesTaskService:
             result_summary=result.result_summary,
             event_type="task.completed",
         )
+        await self.notify_task(completed, event_type="task.completed")
         if on_update is not None:
             await on_update(completed)
         return completed
+
+    async def notify_task(self, task: TaskSummary, *, event_type: str) -> None:
+        try:
+            await self.notifier.notify_task(task, event_type=event_type)
+        except Exception:
+            return None

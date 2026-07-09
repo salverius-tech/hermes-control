@@ -31,6 +31,12 @@ Optional local Hermes command execution:
 CONTROL_API_HERMES_COMMAND='hermes chat -q'
 ```
 
+Optional Discord webhook notifications:
+
+```bash
+CONTROL_API_DISCORD_WEBHOOK_URL='https://discord.com/api/webhooks/[REDACTED]'
+```
+
 Health check:
 
 ```bash

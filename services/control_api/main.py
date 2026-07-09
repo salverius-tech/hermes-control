@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from .auth import expected_token, require_auth
 from .hermes_client import HermesTaskService
 from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskSummary
+from .notifications import notifier_from_environment
 from .projection import TaskProjection
 from .storage import SQLiteTaskStore
 from .websocket import ConnectionManager
@@ -18,7 +19,7 @@ def create_app() -> FastAPI:
     store_path = os.getenv("CONTROL_API_DB_PATH")
     store = SQLiteTaskStore(store_path) if store_path else None
     projection = TaskProjection(store=store) if store else TaskProjection()
-    task_service = HermesTaskService(projection=projection)
+    task_service = HermesTaskService(projection=projection, notifier=notifier_from_environment())
     connections = ConnectionManager()
 
     async def broadcast_task_update(task: TaskSummary) -> None:
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
             "storage": "sqlite" if store_path else "memory",
             "schema_version": str(store.schema_version) if store else "0",
             "execution_mode": "command" if os.getenv("CONTROL_API_HERMES_COMMAND") else "unconfigured",
+            "notification_mode": "discord" if os.getenv("CONTROL_API_DISCORD_WEBHOOK_URL") else "disabled",
             "websocket_path": "/ws/events",
         }
 
@@ -74,6 +76,7 @@ def create_app() -> FastAPI:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         task = projection.reject_task(task_id)
+        await task_service.notify_task(task, event_type="task.rejected")
         await connections.broadcast_task_updated(task)
         return task
 
@@ -82,6 +85,7 @@ def create_app() -> FastAPI:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         task = projection.cancel_task(task_id)
+        await task_service.notify_task(task, event_type="task.canceled")
         await connections.broadcast_task_updated(task)
         return task
 

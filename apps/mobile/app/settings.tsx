@@ -58,6 +58,7 @@ export default function SettingsScreen() {
           <Text style={styles.help}>Storage: {diagnostics.storage}</Text>
           <Text style={styles.help}>Schema: {diagnostics.schema_version}</Text>
           <Text style={styles.help}>Execution: {diagnostics.execution_mode}</Text>
+          <Text style={styles.help}>Notifications: {diagnostics.notification_mode}</Text>
           <Text style={styles.help}>Events: {diagnostics.websocket_path}</Text>
         </MetricCard>
       ) : null}

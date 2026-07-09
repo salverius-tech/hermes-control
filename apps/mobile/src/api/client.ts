@@ -48,6 +48,7 @@ export type Diagnostics = {
   storage: 'memory' | 'sqlite';
   schema_version: string;
   execution_mode: 'unconfigured' | 'command';
+  notification_mode: 'disabled' | 'discord';
   websocket_path: string;
 };
 

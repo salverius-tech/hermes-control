@@ -11,6 +11,7 @@ def test_diagnostics_reports_backend_storage_and_execution_mode(monkeypatch, tmp
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     monkeypatch.setenv("CONTROL_API_DB_PATH", str(tmp_path / "tasks.db"))
     monkeypatch.setenv("CONTROL_API_HERMES_COMMAND", "hermes chat -q")
+    monkeypatch.setenv("CONTROL_API_DISCORD_WEBHOOK_URL", "https://discord.example/webhook")
     client = TestClient(create_app())
 
     response = client.get("/diagnostics", headers={"Authorization": "Bearer dev-token"})
@@ -21,5 +22,6 @@ def test_diagnostics_reports_backend_storage_and_execution_mode(monkeypatch, tmp
         "storage": "sqlite",
         "schema_version": "1",
         "execution_mode": "command",
+        "notification_mode": "discord",
         "websocket_path": "/ws/events",
     }
