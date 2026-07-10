@@ -1,0 +1,19 @@
+# Preferred: expose the Control API on a private/Tailscale-only hostname.
+# Caddy handles HTTPS and WebSocket upgrades automatically for reverse_proxy.
+# Avoid publishing this site to the open internet unless it is additionally protected
+# by a VPN, firewall allowlist, or an authenticated access proxy.
+
+control-api.example.ts.net {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8787
+}
+
+# If you must mount under a path on an existing Hermes domain, strip the prefix.
+# Configure the mobile app API URL with the same prefix, e.g.
+# https://hermes.example.ts.net/control-api
+#
+# hermes.example.ts.net {
+# 	handle_path /control-api/* {
+# 		reverse_proxy 127.0.0.1:8787
+# 	}
+# }

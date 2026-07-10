@@ -25,6 +25,15 @@ CONTROL_API_DISCORD_WEBHOOK_URL='https://discord.com/api/webhooks/[REDACTED]'
 
 Notifications are best-effort and never block task execution. The diagnostics endpoint reports `notification_mode` as `discord` when this value is configured and `disabled` otherwise.
 
+## Production deployment
+
+For the Proxmox LXC where Hermes is already installed and exposed through Caddy, use the production deployment guide and committed examples:
+
+- `docs/DEPLOYMENT.md`
+- `deploy/hermes-mobile-control-api.service`
+- `deploy/Caddyfile.control-api.example`
+- `deploy/control-api.env.example`
+
 ## Mobile development
 
 ```bash

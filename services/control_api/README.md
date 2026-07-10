@@ -37,3 +37,4 @@ Real Hermes execution is intentionally behind the `HermesTaskService` seam. Set 
 - Architecture and layer rules: `../../ARCHITECTURE.md`
 - Test strategy: `../../TESTING.md`
 - Operations runbook: `../../docs/OPERATIONS.md`
+- Proxmox LXC + Caddy deployment: `../../docs/DEPLOYMENT.md`

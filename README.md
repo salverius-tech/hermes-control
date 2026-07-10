@@ -11,7 +11,7 @@ This repository is newly initialized and currently contains:
 - `scripts/verify.py` — canonical unit/integration/e2e verification runner.
 - `ARCHITECTURE.md` — backend/mobile layer map, dependency rules, and integration seam.
 - `TESTING.md` — layer map and test strategy.
-- `docs/` — API contract, operations runbook, and documentation index.
+- `docs/` — API contract, operations/deployment runbooks, and documentation index.
 - `.hermes/plans/` — implementation plan used for this build.
 
 Agent Queue is a separate project and is not a dependency of this app at this time.
@@ -103,6 +103,8 @@ See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-bou
 - `TESTING.md` — verification strategy and coverage map.
 - `docs/API.md` — REST/WebSocket contract.
 - `docs/OPERATIONS.md` — local runbook, Android build/sideload notes, troubleshooting.
+- `docs/DEPLOYMENT.md` — Proxmox LXC + Caddy production deployment guide.
+- `deploy/` — example systemd service, Caddy route, and environment file.
 - `docs/README.md` — documentation index.
 
 ## Security notes

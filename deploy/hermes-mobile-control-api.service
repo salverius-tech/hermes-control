@@ -1,0 +1,25 @@
+[Unit]
+Description=Hermes Mobile Control API
+Documentation=https://github.com/NousResearch/hermes-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/opt/hermes-mobile-control
+EnvironmentFile=/etc/hermes-mobile-control/control-api.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hermes-mobile-control/.venv/bin/python -m uvicorn services.control_api.main:app --host 127.0.0.1 --port 8787 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# Do not enable ProtectHome here: the Hermes CLI may need its profile under /home/hermes/.hermes.
+ReadWritePaths=/var/lib/hermes-mobile-control
+
+[Install]
+WantedBy=multi-user.target
