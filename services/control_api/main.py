@@ -19,7 +19,11 @@ def create_app() -> FastAPI:
     store_path = os.getenv("CONTROL_API_DB_PATH")
     store = SQLiteTaskStore(store_path) if store_path else None
     projection = TaskProjection(store=store) if store else TaskProjection()
-    task_service = HermesTaskService(projection=projection, notifier=notifier_from_environment())
+    task_service = HermesTaskService(
+        projection=projection,
+        notifier=notifier_from_environment(),
+        max_concurrent_tasks=int(os.getenv("CONTROL_API_MAX_CONCURRENT_TASKS", "4")),
+    )
     connections = ConnectionManager()
 
     async def broadcast_task_update(task: TaskSummary) -> None:

@@ -196,7 +196,14 @@ class HermesTaskService:
     projection: TaskProjection
     executor: HermesExecutor = field(default_factory=executor_from_environment)
     notifier: TaskNotifier = field(default_factory=NullTaskNotifier)
+    max_concurrent_tasks: int = 4
     _running_tasks: dict[str, asyncio.Task[TaskSummary]] = field(default_factory=dict, init=False)
+    _execution_slots: asyncio.Semaphore = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.max_concurrent_tasks < 1:
+            raise ValueError("max_concurrent_tasks must be positive")
+        self._execution_slots = asyncio.Semaphore(self.max_concurrent_tasks)
 
     async def submit_task(
         self,
@@ -209,7 +216,7 @@ class HermesTaskService:
         if TaskStatus(task.status) == TaskStatus.AWAITING_APPROVAL:
             await self.notify_task(task, event_type="task.approval_requested")
         if run_inline:
-            return await self._execute(task.task_id, request, on_update=on_update)
+            return await self._execute_with_slot(task.task_id, request, on_update=on_update)
         return task
 
     def start_task(
@@ -219,7 +226,7 @@ class HermesTaskService:
         *,
         on_update: TaskUpdateCallback | None = None,
     ) -> None:
-        run_task = asyncio.create_task(self._execute(task.task_id, request, on_update=on_update))
+        run_task = asyncio.create_task(self._execute_with_slot(task.task_id, request, on_update=on_update))
         self._running_tasks[task.task_id] = run_task
         run_task.add_done_callback(lambda completed: self._running_tasks.pop(task.task_id, None))
 
@@ -309,6 +316,16 @@ class HermesTaskService:
         if on_update is not None:
             await on_update(completed)
         return completed
+
+    async def _execute_with_slot(
+        self,
+        task_id: str,
+        request: TaskCreateRequest,
+        *,
+        on_update: TaskUpdateCallback | None = None,
+    ) -> TaskSummary:
+        async with self._execution_slots:
+            return await self._execute(task_id, request, on_update=on_update)
 
     async def notify_task(self, task: TaskSummary, *, event_type: str) -> None:
         try:

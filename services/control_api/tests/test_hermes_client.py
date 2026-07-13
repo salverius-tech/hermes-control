@@ -40,6 +40,24 @@ class StreamingHermesExecutor:
         return HermesExecutionResult(result_summary="stream complete")
 
 
+class GatedHermesExecutor:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.active = 0
+        self.max_active = 0
+        self.calls = 0
+
+    async def run(self, request: TaskCreateRequest, *, on_log=None) -> HermesExecutionResult:
+        self.calls += 1
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        self.started.set()
+        await self.release.wait()
+        self.active -= 1
+        return HermesExecutionResult(result_summary=request.prompt)
+
+
 @pytest.mark.anyio
 async def test_task_service_runs_executor_and_records_successful_result():
     projection = TaskProjection()
@@ -89,6 +107,29 @@ async def test_task_service_cancels_active_executor_task():
     assert canceled.status == TaskStatus.CANCELED
     assert executor.canceled.is_set()
     assert projection.list_task_events(task.task_id)[-1].event_type == "task.canceled"
+
+
+@pytest.mark.anyio
+async def test_task_service_limits_concurrent_execution():
+    projection = TaskProjection()
+    executor = GatedHermesExecutor()
+    service = HermesTaskService(projection=projection, executor=executor, max_concurrent_tasks=1)
+    first = await service.submit_task(TaskCreateRequest(prompt="first"))
+    second = await service.submit_task(TaskCreateRequest(prompt="second"))
+
+    service.start_task(first, TaskCreateRequest(prompt="first"))
+    service.start_task(second, TaskCreateRequest(prompt="second"))
+    await asyncio.wait_for(executor.started.wait(), timeout=1)
+    await asyncio.sleep(0)
+
+    assert executor.calls == 1
+    assert executor.max_active == 1
+    assert projection.get_task(second.task_id).status == TaskStatus.QUEUED
+
+    executor.release.set()
+    await asyncio.gather(*service._running_tasks.values())
+    assert executor.calls == 2
+    assert executor.max_active == 1
 
 
 @pytest.mark.anyio
