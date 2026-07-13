@@ -149,7 +149,7 @@ The repo includes:
 | A-11 | Keep Hermes integration behind a replaceable application seam. | Must | Implemented |
 | A-12 | Provide diagnostics for storage/execution/notification modes. | Should | Implemented |
 | A-13 | Send optional Discord notifications for important task states. | Could | Implemented |
-| A-14 | Enforce concurrency/rate limiting for multiple devices/users. | Should | Remaining |
+| A-14 | Enforce concurrency/rate limiting for multiple devices/users. | Should | Concurrency limit implemented; request rate limiting remains |
 
 ### 7.3 Deployment requirements
 
@@ -167,7 +167,7 @@ The repo includes:
 | ID | Requirement | Priority | Status |
 |---|---|---:|---|
 | S-1 | Keep real tokens, webhooks, keys, and env files out of git. | Must | Partially implemented with `.gitignore`; needs gating |
-| S-2 | Add pre-commit/pre-push secret scanning gate. | Must | Remaining |
+| S-2 | Add pre-commit/pre-push secret scanning gate. | Must | Implemented |
 | S-3 | Use placeholders in docs/examples instead of real token-shaped values. | Must | In progress |
 | S-4 | Run secret scanner before first push/publish. | Must | Process requirement |
 | S-5 | Mobile stores only Control API URL/token. | Must | Implemented by design |
@@ -466,14 +466,14 @@ Enhanced deployment validation should additionally cover TLS validation, token a
 
 The remaining non-device implementation priorities are:
 
-1. Add pre-commit/pre-push secret scanning gate.
-2. Implement deterministic mobile WebSocket reconciliation and connection state UI.
+1. Implement deterministic mobile WebSocket reconciliation and connection state UI.
 3. Improve mobile offline/error-state behavior, including the first version of a local pending-task queue.
 4. Add stream/reconciliation data-model foundations so future token/event/state streaming does not require rewriting task state management.
 5. Harden voice UX permissions, unavailable-provider handling, and edit-before-submit states.
 6. Continue mobile UI polish and shared component cleanup.
-7. Add backend concurrency/rate-limit guardrails for submitted Hermes tasks.
+7. Add request rate limiting for multiple devices/users.
 8. Add richer approval audit metadata in Control API events.
+9. Replace the subprocess handler with native Hermes task/lifecycle hooks if the host API exposes them.
 
 Deferred until the user can provide the phone/LXC environment:
 
