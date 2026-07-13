@@ -3,7 +3,8 @@
 Start here when orienting to the project:
 
 - `README.md` — project overview, local setup, verification entry points, security notes.
-- `ARCHITECTURE.md` — layer map, dependency rules, integration seam, and intentional limitations.
+- `docs/PRD.md` — canonical product requirements, MVP/later roadmap, current capability status, risks, and remaining work.
+- `ARCHITECTURE.md` — layer map, dependency rules, integration seam, and architecture-specific notes.
 - `TESTING.md` — unit/integration/e2e strategy, commands, and coverage map.
 - `docs/API.md` — companion REST/WebSocket contract.
 - `docs/OPERATIONS.md` — local runbook, Android build/sideload notes, and troubleshooting.

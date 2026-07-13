@@ -148,9 +148,11 @@ These tests guard against common erosion:
 - mobile `src` modules importing Expo Router app screens,
 - pure mobile model helpers importing React Native UI packages.
 
-## Current intentional limitations
+## Current product status and limitations
 
-- Real Hermes task execution is not wired yet.
-- SQLite persistence stores local task projection data only.
-- Mobile e2e device verification is build/install/launch oriented; there is not yet a full Detox/Maestro UI flow.
+Product-level status, limitations, roadmap, and remaining work are tracked in `docs/PRD.md`.
+
+Architecture-specific notes:
+
+- SQLite persistence stores local task projection and event data only; it is not a replacement for Hermes' own session/task history.
 - The generated Android project is committed because native voice/plugin configuration and release build behavior are part of the current deliverable.

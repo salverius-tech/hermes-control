@@ -9,6 +9,7 @@ This repository is newly initialized and currently contains:
 - `services/control_api/` — FastAPI companion API with token auth, optional SQLite task/event persistence, task/project/agent read models, diagnostics, and a configurable Hermes command executor.
 - `apps/mobile/` — Expo React Native app shell with dashboard, bottom navigation, task timelines/results, projects, voice-capable new task, diagnostics, and settings screens.
 - `scripts/verify.py` — canonical unit/integration/e2e verification runner.
+- `docs/PRD.md` — canonical product requirements, roadmap, status, risks, and remaining work.
 - `ARCHITECTURE.md` — backend/mobile layer map, dependency rules, and integration seam.
 - `TESTING.md` — layer map and test strategy.
 - `docs/` — API contract, operations/deployment runbooks, and documentation index.
@@ -46,14 +47,14 @@ curl http://localhost:8787/health
 Authenticated task list:
 
 ```bash
-curl -H 'Authorization: Bearer dev-token' http://localhost:8787/tasks
+curl -H 'Authorization: Bearer <CONTROL_API_TOKEN>' http://localhost:8787/tasks
 ```
 
 Create a task:
 
 ```bash
 curl -X POST \
-  -H 'Authorization: Bearer dev-token' \
+  -H 'Authorization: Bearer <CONTROL_API_TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"prompt":"Check Hermes status"}' \
   http://localhost:8787/tasks
@@ -100,6 +101,7 @@ See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-bou
 ## Documentation map
 
 - `ARCHITECTURE.md` — layer boundaries and dependency direction.
+- `docs/PRD.md` — product requirements, status, roadmap, risks, and remaining work.
 - `TESTING.md` — verification strategy and coverage map.
 - `docs/API.md` — REST/WebSocket contract.
 - `docs/OPERATIONS.md` — local runbook, Android build/sideload notes, troubleshooting.

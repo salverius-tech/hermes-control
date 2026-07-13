@@ -18,25 +18,9 @@ The Agent Queue workspace at `C:\Dev\AgentQueue` is a separate project and is **
 
 ## Product Requirements
 
-### MVP
+The canonical product requirements, MVP/later roadmap, current capability status, risks, and remaining work now live in `docs/PRD.md`.
 
-1. Android app runs locally and can connect to the user's local infrastructure over LAN/VPN/Tailscale.
-2. Shows live task feed grouped by status: queued/running/completed/failed.
-3. Shows agent/project status cards from the companion API task/session/project state.
-4. Starts new Hermes tasks from a text prompt.
-5. Starts new Hermes tasks from voice input by transcribing voice to text before submission.
-6. Provides a clean modern interface with dark/light theme, large readable cards, bottom navigation, and streaming/log detail views.
-7. Protects local infrastructure with token-based authentication.
-
-### Later
-
-1. iOS build with the same codebase.
-2. Push notifications for completed/failed tasks.
-3. Project switching and task templates.
-4. Live interactive chat session with a Hermes agent.
-5. Attach files/images/audio to prompts.
-6. Pairing flow similar to Hermes gateway approval/pairing.
-7. Multi-agent orchestration dashboard.
+This historical implementation plan is retained as build history and task breakdown only.
 
 ## Recommended High-Level Design
 
@@ -435,8 +419,8 @@ Manual smoke:
 # In C:\Dev\HermesMobileControl
 CONTROL_API_TOKEN=dev-token uvicorn services.control_api.main:app --host 0.0.0.0 --port 8787
 curl http://localhost:8787/health
-curl -H 'Authorization: Bearer dev-token' http://localhost:8787/tasks
-curl -X POST -H 'Authorization: Bearer dev-token' -H 'Content-Type: application/json' \
+curl -H 'Authorization: Bearer <CONTROL_API_TOKEN>' http://localhost:8787/tasks
+curl -X POST -H 'Authorization: Bearer <CONTROL_API_TOKEN>' -H 'Content-Type: application/json' \
   -d '{"prompt":"Say hello from Hermes mobile MVP","project_id":"default"}' \
   http://localhost:8787/tasks
 ```
