@@ -5,7 +5,7 @@ plugin code can use the versioned JSONL envelope to communicate with the
 Control API over a local Unix socket.
 """
 
-from .host import SubprocessHermesTaskHandler, handler_from_environment
+from .host import NativeHermesTaskHandler, SubprocessHermesTaskHandler, handler_from_environment
 from .protocol import BRIDGE_VERSION, PluginEvent, PluginRequest, decode_message, encode_message
 from .server import HermesExtensionServer, HermesTaskHandler
 

@@ -132,8 +132,14 @@ class HermesPluginExecutor:
     timeout_seconds: float = 900
     auth_token: str | None = None
 
-    async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult:
-        request_id = str(uuid.uuid4())
+    async def run(
+        self,
+        request: TaskCreateRequest,
+        *,
+        on_log: TaskLogCallback | None = None,
+        request_id: str | None = None,
+    ) -> HermesExecutionResult:
+        request_id = request_id or str(uuid.uuid4())
         reader, writer = await asyncio.wait_for(
             asyncio.open_unix_connection(self.socket_path), timeout=self.timeout_seconds
         )

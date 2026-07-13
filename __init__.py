@@ -12,6 +12,10 @@ from urllib.request import Request, urlopen
 
 from services.hermes_extension import HermesExtensionServer, handler_from_environment
 
+_bridge_stop_event = threading.Event()
+_bridge_thread: threading.Thread | None = None
+
+
 _TOOL_SCHEMA = {
     "name": "hermes_control",
     "description": "Inspect or submit tasks through the local Hermes Control API.",
@@ -82,6 +86,13 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _nonnegative_float(name: str, default: float) -> float:
+    value = float(os.getenv(name, str(default)))
+    if value < 0:
+        raise ValueError(f"{name} must not be negative")
+    return value
+
+
 def _bridge_token() -> str | None:
     token = os.getenv("HERMES_CONTROL_EXTENSION_TOKEN")
     if token:
@@ -104,9 +115,13 @@ def _run_bridge() -> None:
             auth_token=_bridge_token(),
             max_message_bytes=_positive_int("HERMES_CONTROL_EXTENSION_MAX_MESSAGE_BYTES", 1_048_576),
             max_concurrent_tasks=_positive_int("HERMES_CONTROL_EXTENSION_MAX_CONCURRENT_TASKS", 4),
+            heartbeat_seconds=_nonnegative_float("HERMES_CONTROL_EXTENSION_HEARTBEAT_SECONDS", 0),
         )
-        await server.start()
-        await asyncio.Event().wait()
+        try:
+            await server.start()
+            await asyncio.to_thread(_bridge_stop_event.wait)
+        finally:
+            await server.close()
 
     try:
         asyncio.run(serve())
@@ -115,8 +130,17 @@ def _run_bridge() -> None:
 
 
 def _start_bridge() -> None:
-    thread = threading.Thread(target=_run_bridge, name="hermes-control-extension", daemon=True)
-    thread.start()
+    global _bridge_thread
+    if _bridge_thread is not None and _bridge_thread.is_alive():
+        return
+    _bridge_stop_event.clear()
+    _bridge_thread = threading.Thread(target=_run_bridge, name="hermes-control-extension", daemon=True)
+    _bridge_thread.start()
+
+
+def stop_bridge() -> None:
+    """Stop the plugin bridge during Hermes plugin unload or test teardown."""
+    _bridge_stop_event.set()
 
 
 def register(ctx) -> None:

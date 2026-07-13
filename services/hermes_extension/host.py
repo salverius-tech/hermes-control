@@ -3,20 +3,33 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from .protocol import PluginEvent, PluginRequest
 from .server import PluginEventSink
 
 
-@dataclass(frozen=True)
-class SubprocessHermesTaskHandler:
-    """Execute extension tasks through a local Hermes-compatible command.
+NativeTaskRunner = Callable[[PluginRequest, PluginEventSink], Awaitable[str]]
 
-    This is the first concrete host implementation. Once Hermes exposes stable
-    in-process lifecycle hooks for the installed runtime, this handler can be
-    replaced without changing the bridge or Control API contract.
+
+@dataclass
+class NativeHermesTaskHandler:
+    """Adapter for a future Hermes-native task runner callback.
+
+    Hermes currently does not expose a stable host-task lifecycle callback. A
+    supported callback can be injected here without changing the bridge.
     """
+
+    run_task: NativeTaskRunner
+
+    async def run(self, request: PluginRequest, *, emit: PluginEventSink) -> str:
+        return await self.run_task(request, emit)
+
+
+@dataclass
+class SubprocessHermesTaskHandler:
+    """Run the configured Hermes CLI while preserving the structured bridge."""
 
     command: tuple[str, ...]
     timeout_seconds: float = 900
@@ -29,43 +42,37 @@ class SubprocessHermesTaskHandler:
             stderr=asyncio.subprocess.PIPE,
         )
         assert process.stdin is not None
-        process.stdin.write(request.prompt.encode("utf-8"))
+        assert process.stdout is not None
+        assert process.stderr is not None
+        process.stdin.write(request.prompt.encode())
         await process.stdin.drain()
         process.stdin.close()
 
-        async def forward(stream: asyncio.StreamReader | None) -> list[str]:
+        async def read_stream(stream: asyncio.StreamReader) -> list[str]:
             lines: list[str] = []
-            if stream is None:
-                return lines
-            while line := await stream.readline():
-                message = line.decode("utf-8", errors="replace").rstrip("\r\n")
-                if message:
-                    lines.append(message)
-                    await emit(
-                        PluginEvent(
-                            event_type="progress",
-                            request_id=request.request_id,
-                            message=message,
-                        )
-                    )
+            async for raw_line in stream:
+                line = raw_line.decode(errors="replace").strip()
+                if line:
+                    lines.append(line)
+                    await emit(PluginEvent(event_type="progress", request_id=request.request_id, message=line))
             return lines
 
+        stdout_task = asyncio.create_task(read_stream(process.stdout))
+        stderr_task = asyncio.create_task(read_stream(process.stderr))
         try:
-            stdout_task = asyncio.create_task(forward(process.stdout))
-            stderr_task = asyncio.create_task(forward(process.stderr))
             await asyncio.wait_for(process.wait(), timeout=self.timeout_seconds)
             stdout_lines, stderr_lines = await asyncio.gather(stdout_task, stderr_task)
-        except TimeoutError as exc:
-            process.kill()
-            await process.wait()
-            raise RuntimeError("Hermes extension command timed out") from exc
-        except asyncio.CancelledError:
-            process.kill()
-            await process.wait()
+        except BaseException:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            for task in (stdout_task, stderr_task):
+                task.cancel()
+            await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
             raise
 
         if process.returncode != 0:
-            detail = "\n".join(stderr_lines or stdout_lines) or f"Hermes exited with {process.returncode}"
+            detail = "\n".join(stderr_lines or stdout_lines) or f"Hermes command exited with {process.returncode}"
             raise RuntimeError(detail)
         return "\n".join(stdout_lines) or "Hermes command completed"
 

@@ -13,7 +13,11 @@ pytestmark = pytest.mark.unit
 
 
 class RecordingHandler:
+    def __init__(self):
+        self.calls = 0
+
     async def run(self, request, *, emit):
+        self.calls += 1
         await emit(PluginEvent(event_type="progress", request_id=request.request_id, message="accepted"))
         await emit(PluginEvent(event_type="progress", request_id=request.request_id, message="running"))
         return f"completed: {request.prompt}"
@@ -40,6 +44,24 @@ async def test_extension_server_accepts_task_and_emits_structured_events(tmp_pat
     assert progress == ["accepted", "running"]
     assert result.result_summary == "completed: inspect the runtime"
     assert not os.path.exists(socket_path)
+
+
+@pytest.mark.anyio
+async def test_duplicate_request_id_replays_without_rerunning_handler(tmp_path):
+    socket_path = str(tmp_path / "replay-extension.sock")
+    handler = RecordingHandler()
+    server = HermesExtensionServer(socket_path, handler)
+    await server.start()
+    try:
+        executor = HermesPluginExecutor(socket_path, timeout_seconds=1)
+        request = TaskCreateRequest(prompt="replay me")
+        first = await executor.run(request, request_id="stable-request")
+        second = await executor.run(request, request_id="stable-request")
+    finally:
+        await server.close()
+
+    assert first.result_summary == second.result_summary == "completed: replay me"
+    assert handler.calls == 1
 
 
 @pytest.mark.anyio
@@ -136,3 +158,30 @@ async def test_extension_server_rejects_invalid_resource_limits(tmp_path):
             RecordingHandler(),
             max_concurrent_tasks=0,
         ).start()
+
+
+@pytest.mark.anyio
+async def test_server_serve_forever_stops_with_close(tmp_path):
+    server = HermesExtensionServer(str(tmp_path / "lifecycle.sock"), RecordingHandler())
+    await server.start()
+    serving = asyncio.create_task(server.serve_forever())
+    await asyncio.sleep(0)
+    await server.close()
+    await asyncio.wait_for(serving, timeout=1)
+
+
+@pytest.mark.anyio
+async def test_heartbeat_loop_is_cancelable():
+    server = HermesExtensionServer("unused.sock", RecordingHandler(), heartbeat_seconds=0.001)
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    heartbeat = asyncio.create_task(server._heartbeat_loop("heartbeat-request", emit))
+    await asyncio.sleep(0.01)
+    heartbeat.cancel()
+    await asyncio.gather(heartbeat, return_exceptions=True)
+
+    assert events
+    assert all(event.event_type == "heartbeat" for event in events)
