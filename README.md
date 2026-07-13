@@ -91,6 +91,19 @@ pnpm start
 
 When testing from a physical Android device, use the PC's LAN IP or Tailscale hostname rather than `127.0.0.1`.
 
+## Extension bundle
+
+Build a distributable Hermes plugin bundle from the repository root:
+
+```bash
+python3 scripts/build_extension_bundle.py --output /tmp/hermes-control-extension.tar.gz
+tar -xzf /tmp/hermes-control-extension.tar.gz -C /opt/hermes/plugins
+sudo install -m 0644 deploy/hermes-control-extension.tmpfiles /etc/tmpfiles.d/hermes-control-extension.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/hermes-control-extension.conf
+```
+
+Configure the same socket path and bridge token for the Hermes plugin and Control API. The plugin requires `HERMES_CONTROL_EXTENSION_TOKEN` by default; only set `HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED=1` for local development.
+
 ## Verification
 
 Canonical verification:
