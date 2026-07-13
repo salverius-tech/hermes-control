@@ -260,20 +260,30 @@ Implementation direction:
 - File/log browsing must be read-only, path-confined, and safe against traversal.
 - Mobile UI should reuse list, timeline, and metric-card primitives.
 
-#### 7.5.5 Hermes-side plugin architecture
+#### 7.5.5 Hermes Control Extension architecture
 
 | ID | Requirement | Priority | Status |
 |---|---|---:|---|
-| E-PLUGIN-1 | Replace or augment CLI wrapping with a structured Hermes-side plugin. | Could | Proposed |
-| E-PLUGIN-2 | Emit structured task lifecycle events directly to Control API. | Could | Proposed |
+| E-PLUGIN-1 | Replace or augment CLI wrapping with a structured Hermes-side plugin. | Could | In progress |
+| E-PLUGIN-2 | Emit structured task lifecycle events directly to Control API. | Could | In progress |
 | E-PLUGIN-3 | Emit structured tool-call reporting and intermediate outputs. | Could | Proposed |
 | E-PLUGIN-4 | Keep CLI execution mode as fallback. | Must | Required for compatibility |
 
 Implementation direction:
 
-- Implement a Hermes plugin that hooks into task lifecycle events and emits JSON envelopes.
-- Control API should receive plugin events via a local IPC mechanism, pipe, or local authenticated callback.
-- The mobile-facing API should remain stable whether events originate from CLI wrapping or the plugin.
+- Implement a single installable **Hermes Control Extension** bundle containing a
+  Hermes-side plugin/adapter and a separately supervised Control API service.
+- Keep the plugin and Control API in separate processes by default. This preserves
+  agent stability and lets the API own mobile connection, persistence, and auth concerns.
+- Connect the plugin to the Control API through local authenticated IPC, initially
+  newline-delimited JSON over a Unix socket.
+- Keep the mobile-facing API stable whether events originate from CLI wrapping or the
+  structured extension bridge.
+- Treat the CLI executor as the compatibility fallback when the extension bridge is
+  unavailable or unsupported by the installed Hermes version.
+
+The extension is one operator-facing installable product, not necessarily one process.
+Embedding the API server in the Hermes process is optional and is not the default model.
 
 #### 7.5.6 WebSocket reconciliation model
 
@@ -324,7 +334,7 @@ Implementation direction:
 10. Multi-agent orchestration dashboard.
 11. Multiple users/devices with stronger auth, rate limits, and audit logs.
 12. Rich artifact browsing for generated files, links, screenshots, and media.
-13. Structured Hermes-side plugin in place of or alongside CLI command execution.
+13. Hermes Control Extension bundle with structured plugin bridge alongside CLI fallback.
 14. Optional integration with future Hermes API/gateway surfaces in place of CLI command execution.
 
 ## 9. UX requirements
@@ -433,7 +443,7 @@ Enhanced deployment validation should additionally cover TLS validation, token a
 9. Should stream ordering use global monotonic sequence numbers, per-task sequence numbers, vector clocks, or another model?
 10. Which mobile push path should be preferred: native FCM, Expo notifications, Hermes gateway delivery, or an adapter layer?
 11. What project directories/log paths are safe to expose through a read-only browser, and how should path allowlists be configured?
-12. What IPC mechanism should a future Hermes-side plugin use to emit structured events to the Control API?
+12. What additional Hermes lifecycle hooks should the extension expose beyond task execution?
 
 ## 14. Risks and mitigations
 
@@ -448,7 +458,7 @@ Enhanced deployment validation should additionally cover TLS validation, token a
 | Offline submissions create duplicate tasks | Use client idempotency keys and reconcile local queued tasks with server state on reconnect. |
 | Notification quick actions accidentally approve the wrong task | Use explicit task ids, confirmation affordances where practical, audit logs, and deep links to review state. |
 | Read-only file/log browser exposes sensitive files | Restrict to explicit project allowlists, block traversal, redact secrets where possible, and test denial paths. |
-| Hermes plugin API changes or is unavailable | Keep CLI mode as a compatibility fallback and keep mobile-facing contracts stable. |
+| Hermes plugin API changes or is unavailable | Keep CLI mode as a compatibility fallback, version the local IPC envelope, and keep mobile-facing contracts stable. |
 | Voice packages differ across Android/iOS | Abstract voice provider and verify Android first; treat iOS as later milestone. |
 | Product docs drift from implementation | Keep PRD status table updated when significant capabilities land. |
 | Physical-device issues are missed by unit tests | Defer device-required tasks until phone is available, then run release sideload and Maestro flows. |

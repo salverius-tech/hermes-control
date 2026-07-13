@@ -17,8 +17,11 @@ FastAPI companion API
   ├─ persistence adapter: services/control_api/storage.py
   └─ contracts/domain models: services/control_api/models.py
         ↓
-Future Hermes adapter
-  └─ CLI, Hermes API Server, gateway, or another explicitly selected surface
+Hermes Control Extension
+  ├─ Control API service (separate supervised process)
+  └─ Hermes-side plugin/adapter over local authenticated IPC
+        ↓
+Hermes execution/runtime
 ```
 
 Agent Queue is deliberately not part of this dependency graph.
@@ -72,13 +75,29 @@ Rules:
 
 `services/control_api/hermes_client.py`
 
-`HermesTaskService` is the seam for real Hermes execution. Today it records a queued task in the projection. Later it can delegate to a Hermes CLI/API/gateway adapter without changing mobile-facing REST/WebSocket contracts.
+`HermesTaskService` is the seam for real Hermes execution. It can delegate to the
+structured Hermes Control Extension bridge or the CLI fallback without changing
+mobile-facing REST/WebSocket contracts.
 
 Rules:
 
 - Mobile/API contracts stay stable.
 - Real Hermes integration goes behind this seam, not in route handlers.
 - Adapter-specific credentials/config must stay outside source control.
+
+### Hermes Control Extension
+
+The extension is one installable operator-facing bundle with two runtime components:
+
+- a Hermes-side plugin that receives task requests and emits structured lifecycle,
+  tool-call, progress, and result events;
+- the Control API service, normally supervised separately so API failures cannot take
+  down the Hermes process.
+
+The initial bridge uses versioned newline-delimited JSON over a Unix socket. The socket
+is local-only and must be protected by filesystem permissions and, where needed, an
+application-level secret. The CLI executor remains available as a compatibility
+fallback when the plugin is unavailable.
 
 ### Transport/composition
 

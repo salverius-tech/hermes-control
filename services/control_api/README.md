@@ -29,7 +29,12 @@ Authorization: Bearer <CONTROL_API_TOKEN>
 
 `HermesTaskService` records task state through the projection layer. Set `CONTROL_API_DB_PATH` to persist task state in SQLite across API restarts; omit it for in-memory development mode.
 
-Real Hermes execution is intentionally behind the `HermesTaskService` seam. Set `CONTROL_API_HERMES_COMMAND` to run a local Hermes-compatible command; the prompt is sent on stdin, stdout/stderr lines are recorded as live task progress, and active subprocesses are terminated when the task is canceled.
+Real Hermes execution is intentionally behind the `HermesTaskService` seam. Set
+`CONTROL_API_HERMES_PLUGIN_SOCKET` to use the structured Hermes Control Extension
+bridge. The bridge is a local newline-delimited JSON protocol over a Unix socket.
+If the socket is not configured, set `CONTROL_API_HERMES_COMMAND` to use the CLI
+compatibility executor. The prompt is sent on stdin, stdout/stderr lines are recorded
+as live task progress, and active subprocesses are terminated when the task is canceled.
 
 ## More detail
 

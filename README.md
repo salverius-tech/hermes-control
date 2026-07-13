@@ -17,6 +17,15 @@ This repository is newly initialized and currently contains:
 
 Agent Queue is a separate project and is not a dependency of this app at this time.
 
+## Toolchain requirements
+
+- Python 3.13+ with a project virtualenv and `requirements.txt` installed.
+- Node.js 20+.
+- pnpm 10.12.1, pinned by `apps/mobile/package.json`.
+
+The mobile workspace uses pnpm exclusively. Install the mobile dependencies with
+`pnpm install` from `apps/mobile`; do not use npm or commit a second lockfile.
+
 ## Backend setup
 
 ```bash
@@ -30,6 +39,16 @@ Optional local Hermes command execution:
 
 ```bash
 CONTROL_API_HERMES_COMMAND='hermes chat -q'
+```
+
+The Hermes Control Extension is also a standalone Hermes plugin. Its root
+`plugin.yaml` and `__init__.py` register the `hermes_control` tool and start the
+local structured bridge. The plugin-side compatibility command is configured
+separately from the Control API:
+
+```bash
+HERMES_CONTROL_EXTENSION_SOCKET=/run/hermes/control-extension.sock
+HERMES_CONTROL_EXTENSION_HERMES_COMMAND='hermes chat -q'
 ```
 
 Optional Discord webhook notifications:
@@ -64,9 +83,9 @@ curl -X POST \
 
 ```bash
 cd apps/mobile
-npm install
-npm run typecheck
-npm start
+pnpm install
+pnpm run typecheck
+pnpm start
 ```
 
 When testing from a physical Android device, use the PC's LAN IP or Tailscale hostname rather than `127.0.0.1`.

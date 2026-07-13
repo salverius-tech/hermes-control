@@ -4,8 +4,11 @@ import asyncio
 import contextlib
 import os
 import shlex
+import uuid
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Protocol
+
+from services.hermes_extension import PluginEvent, PluginRequest, decode_message, encode_message
 
 from .models import TaskCreateRequest, TaskStatus, TaskSummary
 from .projection import TaskProjection
@@ -116,7 +119,62 @@ class LocalHermesCommandExecutor:
         return HermesExecutionResult(result_summary=stdout_text or "Hermes command completed", log_messages=logs)
 
 
+@dataclass(frozen=True)
+class HermesPluginExecutor:
+    """Executes a task through the local Hermes Control Extension bridge.
+
+    The plugin owns Hermes lifecycle and tool integration. The Control API only
+    translates the mobile task request into a versioned JSONL bridge request and
+    forwards structured progress events to its projection layer.
+    """
+
+    socket_path: str
+    timeout_seconds: float = 900
+
+    async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult:
+        request_id = str(uuid.uuid4())
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_unix_connection(self.socket_path), timeout=self.timeout_seconds
+        )
+        bridge_request = PluginRequest(
+            request_id=request_id,
+            prompt=request.prompt,
+            project_id=request.project_id,
+            priority=request.priority,
+            source=request.source,
+            requires_approval=request.requires_approval,
+        )
+        writer.write(encode_message(bridge_request.to_message()))
+        await writer.drain()
+        logs: list[str] = []
+        try:
+            while True:
+                line = await asyncio.wait_for(reader.readline(), timeout=self.timeout_seconds)
+                if not line:
+                    raise RuntimeError("Hermes extension bridge disconnected before task completion")
+                event = PluginEvent.from_message(decode_message(line))
+                if event.request_id != request_id:
+                    continue
+                if event.message:
+                    logs.append(event.message)
+                    if on_log is not None:
+                        await on_log(event.message)
+                if event.event_type == "completed":
+                    return HermesExecutionResult(
+                        result_summary=event.result_summary or "Hermes plugin task completed",
+                        log_messages=[] if on_log is not None else logs,
+                    )
+                if event.event_type == "failed":
+                    raise RuntimeError(event.error or event.message or "Hermes plugin task failed")
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+
 def executor_from_environment() -> HermesExecutor:
+    plugin_socket = os.getenv("CONTROL_API_HERMES_PLUGIN_SOCKET")
+    if plugin_socket:
+        return HermesPluginExecutor(plugin_socket)
     command = os.getenv("CONTROL_API_HERMES_COMMAND")
     if command:
         return LocalHermesCommandExecutor(tuple(shlex.split(command, posix=os.name != "nt")))

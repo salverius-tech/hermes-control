@@ -44,7 +44,13 @@ def create_app() -> FastAPI:
             "version": "0.1.0",
             "storage": "sqlite" if store_path else "memory",
             "schema_version": str(store.schema_version) if store else "0",
-            "execution_mode": "command" if os.getenv("CONTROL_API_HERMES_COMMAND") else "unconfigured",
+            "execution_mode": (
+                "plugin"
+                if os.getenv("CONTROL_API_HERMES_PLUGIN_SOCKET")
+                else "command"
+                if os.getenv("CONTROL_API_HERMES_COMMAND")
+                else "unconfigured"
+            ),
             "notification_mode": "discord" if os.getenv("CONTROL_API_DISCORD_WEBHOOK_URL") else "disabled",
             "websocket_path": "/ws/events",
         }

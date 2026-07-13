@@ -1,0 +1,7 @@
+name: hermes-control-extension
+version: 0.1.0
+description: "Mobile control bridge and local Hermes task adapter."
+author: hermes-control
+kind: standalone
+provides_tools:
+  - hermes_control

@@ -75,11 +75,11 @@ def verify_backend() -> None:
 
 
 def verify_mobile() -> None:
-    npm = command("npm")
-    npx = command("npx")
-    run("mobile TypeScript", [npm, "run", "typecheck"], MOBILE)
-    run("mobile unit tests", [npm, "run", "test:unit"], MOBILE)
-    run("Expo config", [npx, "expo", "config", "--type", "public"], MOBILE)
+    pnpm = command("pnpm")
+    pnpx = command("pnpx")
+    run("mobile TypeScript", [pnpm, "run", "typecheck"], MOBILE)
+    run("mobile unit tests", [pnpm, "run", "test:unit"], MOBILE)
+    run("Expo config", [pnpx, "expo", "config", "--type", "public"], MOBILE)
 
 
 def verify_android(*, sideload: bool) -> None:

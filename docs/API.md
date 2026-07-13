@@ -234,6 +234,19 @@ Broadcast when execution starts, records progress, completes, fails, waits for a
 }
 ```
 
+## Hermes Control Extension bridge
+
+The preferred structured integration is the Hermes Control Extension. The
+Control API connects to its local Unix-socket bridge when
+`CONTROL_API_HERMES_PLUGIN_SOCKET` is set. The bridge uses versioned
+newline-delimited JSON and carries task submissions plus structured progress,
+completion, failure, and future tool/lifecycle events.
+
+The extension is one installable operator-facing bundle, but the Hermes-side
+plugin and Control API normally run as separate supervised processes. This
+keeps mobile auth, persistence, and WebSocket handling out of the Hermes
+process. The CLI executor remains available as a fallback.
+
 ## Persistence mode
 
 By default, tasks and events are in-memory and disappear when the API process restarts.

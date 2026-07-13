@@ -6,11 +6,13 @@ import pytest
 from services.control_api.hermes_client import (
     FakeHermesExecutor,
     HermesExecutionResult,
+    HermesPluginExecutor,
     HermesTaskService,
     LocalHermesCommandExecutor,
 )
 from services.control_api.models import TaskCreateRequest, TaskStatus
 from services.control_api.projection import TaskProjection
+from services.hermes_extension import decode_message, encode_message
 
 
 pytestmark = pytest.mark.unit
@@ -166,3 +168,51 @@ async def test_local_command_executor_streams_output_before_process_exits():
     assert "stdout:first" in progress_messages
     assert "stderr:first" in progress_messages
     assert result.result_summary == "stdout:first\nstdout:done"
+
+
+@pytest.mark.anyio
+async def test_plugin_executor_round_trips_structured_task_and_progress(tmp_path):
+    socket_path = str(tmp_path / "hermes-extension.sock")
+    received = {}
+
+    async def handle(reader, writer):
+        received.update(decode_message(await reader.readline()))
+        request_id = received["request_id"]
+        writer.write(encode_message({
+            "version": 1,
+            "type": "task.event",
+            "event": "progress",
+            "request_id": request_id,
+            "message": "plugin started",
+        }))
+        writer.write(encode_message({
+            "version": 1,
+            "type": "task.event",
+            "event": "completed",
+            "request_id": request_id,
+            "result_summary": "plugin result",
+        }))
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_unix_server(handle, path=socket_path)
+    try:
+        progress = []
+
+        async def on_log(message: str) -> None:
+            progress.append(message)
+
+        result = await HermesPluginExecutor(socket_path, timeout_seconds=1).run(
+            TaskCreateRequest(prompt="run through plugin", project_id="mobile"),
+            on_log=on_log,
+        )
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert received["type"] == "task.submit"
+    assert received["task"]["prompt"] == "run through plugin"
+    assert received["task"]["project_id"] == "mobile"
+    assert progress == ["plugin started"]
+    assert result.result_summary == "plugin result"
