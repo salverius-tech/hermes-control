@@ -48,6 +48,7 @@ separately from the Control API:
 
 ```bash
 HERMES_CONTROL_EXTENSION_SOCKET=/run/hermes/control-extension.sock
+HERMES_CONTROL_EXTENSION_TOKEN='replace-with-local-bridge-token'
 HERMES_CONTROL_EXTENSION_HERMES_COMMAND='hermes chat -q'
 ```
 

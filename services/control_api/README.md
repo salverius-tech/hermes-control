@@ -32,6 +32,8 @@ Authorization: Bearer <CONTROL_API_TOKEN>
 Real Hermes execution is intentionally behind the `HermesTaskService` seam. Set
 `CONTROL_API_HERMES_PLUGIN_SOCKET` to use the structured Hermes Control Extension
 bridge. The bridge is a local newline-delimited JSON protocol over a Unix socket.
+Set `CONTROL_API_HERMES_PLUGIN_TOKEN` when the plugin requires a shared local
+bridge token.
 If the socket is not configured, set `CONTROL_API_HERMES_COMMAND` to use the CLI
 compatibility executor. The prompt is sent on stdin, stdout/stderr lines are recorded
 as live task progress, and active subprocesses are terminated when the task is canceled.

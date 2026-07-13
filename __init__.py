@@ -55,7 +55,11 @@ def _run_bridge() -> None:
     socket_path = os.getenv("HERMES_CONTROL_EXTENSION_SOCKET", "/run/hermes/control-extension.sock")
 
     async def serve() -> None:
-        server = HermesExtensionServer(socket_path, handler_from_environment())
+        server = HermesExtensionServer(
+            socket_path,
+            handler_from_environment(),
+            auth_token=os.getenv("HERMES_CONTROL_EXTENSION_TOKEN"),
+        )
         await server.start()
         await asyncio.Event().wait()
 

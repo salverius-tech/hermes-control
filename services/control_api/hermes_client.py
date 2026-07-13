@@ -130,6 +130,7 @@ class HermesPluginExecutor:
 
     socket_path: str
     timeout_seconds: float = 900
+    auth_token: str | None = None
 
     async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult:
         request_id = str(uuid.uuid4())
@@ -143,6 +144,7 @@ class HermesPluginExecutor:
             priority=request.priority,
             source=request.source,
             requires_approval=request.requires_approval,
+            auth_token=self.auth_token,
         )
         writer.write(encode_message(bridge_request.to_message()))
         await writer.drain()
@@ -174,7 +176,7 @@ class HermesPluginExecutor:
 def executor_from_environment() -> HermesExecutor:
     plugin_socket = os.getenv("CONTROL_API_HERMES_PLUGIN_SOCKET")
     if plugin_socket:
-        return HermesPluginExecutor(plugin_socket)
+        return HermesPluginExecutor(plugin_socket, auth_token=os.getenv("CONTROL_API_HERMES_PLUGIN_TOKEN"))
     command = os.getenv("CONTROL_API_HERMES_COMMAND")
     if command:
         return LocalHermesCommandExecutor(tuple(shlex.split(command, posix=os.name != "nt")))

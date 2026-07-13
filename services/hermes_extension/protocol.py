@@ -17,9 +17,10 @@ class PluginRequest:
     priority: str
     source: str
     requires_approval: bool
+    auth_token: str | None = None
 
     def to_message(self) -> dict[str, Any]:
-        return {
+        message = {
             "version": BRIDGE_VERSION,
             "type": "task.submit",
             "request_id": self.request_id,
@@ -31,6 +32,9 @@ class PluginRequest:
                 "requires_approval": self.requires_approval,
             },
         }
+        if self.auth_token is not None:
+            message["auth_token"] = self.auth_token
+        return message
 
     @classmethod
     def from_message(cls, message: dict[str, Any]) -> "PluginRequest":
@@ -43,6 +47,17 @@ class PluginRequest:
         required = ("prompt", "project_id", "priority", "source", "requires_approval")
         if any(field not in task for field in required):
             raise ValueError("task.submit task payload is incomplete")
+        if not all(isinstance(task[field], str) for field in ("prompt", "project_id", "priority", "source")):
+            raise ValueError("task.submit string fields are invalid")
+        if not task["prompt"].strip() or not task["project_id"].strip() or not task["source"].strip():
+            raise ValueError("task.submit string fields must not be blank")
+        if task["priority"] not in {"low", "normal", "high"}:
+            raise ValueError("task.submit priority is invalid")
+        if not isinstance(task["requires_approval"], bool):
+            raise ValueError("task.submit requires_approval must be boolean")
+        auth_token = message.get("auth_token")
+        if auth_token is not None and not isinstance(auth_token, str):
+            raise ValueError("task.submit auth_token is invalid")
         return cls(
             request_id=request_id,
             prompt=task["prompt"],
@@ -50,6 +65,7 @@ class PluginRequest:
             priority=task["priority"],
             source=task["source"],
             requires_approval=task["requires_approval"],
+            auth_token=auth_token,
         )
 
 

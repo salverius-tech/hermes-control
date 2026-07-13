@@ -54,6 +54,7 @@ Configuration:
 
 ```bash
 HERMES_CONTROL_EXTENSION_SOCKET=/run/hermes/control-extension.sock
+HERMES_CONTROL_EXTENSION_TOKEN='replace-with-local-bridge-token'
 HERMES_CONTROL_EXTENSION_HERMES_COMMAND='hermes chat -q'
 CONTROL_API_URL='http://127.0.0.1:8787'
 CONTROL_API_TOKEN='replace-with-control-api-token'

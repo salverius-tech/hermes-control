@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class HermesExtensionServer:
     socket_path: str
     handler: HermesTaskHandler
     file_mode: int = 0o660
+    auth_token: str | None = None
     _server: asyncio.AbstractServer | None = None
 
     async def start(self) -> None:
@@ -51,6 +53,8 @@ class HermesExtensionServer:
                 raise ValueError("expected task.submit message")
             request = PluginRequest.from_message(message)
             request_id = request.request_id
+            if self.auth_token is not None and not hmac.compare_digest(request.auth_token or "", self.auth_token):
+                raise PermissionError("invalid Hermes extension token")
 
             async def emit(event: PluginEvent) -> None:
                 if event.request_id != request.request_id:

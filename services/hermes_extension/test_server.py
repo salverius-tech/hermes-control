@@ -57,3 +57,21 @@ async def test_extension_server_reports_handler_failures(tmp_path):
             )
     finally:
         await server.close()
+
+
+@pytest.mark.anyio
+async def test_extension_server_rejects_missing_or_invalid_auth_token(tmp_path):
+    socket_path = str(tmp_path / "protected-extension.sock")
+    server = HermesExtensionServer(socket_path, RecordingHandler(), auth_token="secret")
+    await server.start()
+    try:
+        request = TaskCreateRequest(prompt="protected")
+        with pytest.raises(RuntimeError, match="invalid Hermes extension token"):
+            await HermesPluginExecutor(socket_path, timeout_seconds=1).run(request)
+        with pytest.raises(RuntimeError, match="invalid Hermes extension token"):
+            await HermesPluginExecutor(socket_path, timeout_seconds=1, auth_token="wrong").run(request)
+        result = await HermesPluginExecutor(socket_path, timeout_seconds=1, auth_token="secret").run(request)
+    finally:
+        await server.close()
+
+    assert result.result_summary == "completed: protected"
