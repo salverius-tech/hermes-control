@@ -58,3 +58,12 @@ def test_encode_message_is_single_newline_delimited_record():
 
     assert encoded.endswith(b"\n")
     assert encoded.count(b"\n") == 1
+
+
+def test_plugin_event_rejects_invalid_sequence():
+    from services.hermes_extension.protocol import PluginEvent
+
+    with pytest.raises(ValueError, match="seq must be a positive integer"):
+        PluginEvent.from_message(
+            {"version": 1, "type": "task.event", "event": "progress", "request_id": "req-1", "seq": 0}
+        )

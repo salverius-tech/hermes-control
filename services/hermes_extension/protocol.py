@@ -78,6 +78,7 @@ class PluginEvent:
     message: str | None = None
     result_summary: str | None = None
     error: str | None = None
+    sequence: int | None = None
 
     def to_message(self) -> dict[str, Any]:
         message: dict[str, Any] = {
@@ -92,6 +93,8 @@ class PluginEvent:
             message["result_summary"] = self.result_summary
         if self.error is not None:
             message["error"] = self.error
+        if self.sequence is not None:
+            message["seq"] = self.sequence
         return message
 
     @classmethod
@@ -104,12 +107,16 @@ class PluginEvent:
         event_type = message.get("event")
         if not isinstance(request_id, str) or not isinstance(event_type, str):
             raise ValueError("task.event requires request_id and event")
+        sequence = message.get("seq")
+        if sequence is not None and (not isinstance(sequence, int) or sequence < 1):
+            raise ValueError("task.event seq must be a positive integer")
         return cls(
             event_type=event_type,
             request_id=request_id,
             message=message.get("message"),
             result_summary=message.get("result_summary"),
             error=message.get("error"),
+            sequence=sequence,
         )
 
 

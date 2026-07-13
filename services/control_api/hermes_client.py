@@ -149,6 +149,7 @@ class HermesPluginExecutor:
         writer.write(encode_message(bridge_request.to_message()))
         await writer.drain()
         logs: list[str] = []
+        last_sequence = 0
         try:
             while True:
                 line = await asyncio.wait_for(reader.readline(), timeout=self.timeout_seconds)
@@ -157,6 +158,10 @@ class HermesPluginExecutor:
                 event = PluginEvent.from_message(decode_message(line))
                 if event.request_id != request_id:
                     continue
+                if event.sequence is not None:
+                    if event.sequence != last_sequence + 1:
+                        raise RuntimeError("Hermes extension bridge event sequence is invalid")
+                    last_sequence = event.sequence
                 if event.message:
                     logs.append(event.message)
                     if on_log is not None:

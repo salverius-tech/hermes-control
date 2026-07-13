@@ -5,7 +5,7 @@ import contextlib
 import hmac
 import os
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from .protocol import PluginEvent, PluginRequest, decode_message, encode_message
@@ -70,12 +70,19 @@ class HermesExtensionServer:
                 raise ValueError("expected task.submit message")
             request = PluginRequest.from_message(message)
             request_id = request.request_id
+            event_sequence = 0
             if self.auth_token is not None and not hmac.compare_digest(request.auth_token or "", self.auth_token):
                 raise PermissionError("invalid Hermes extension token")
 
             async def emit(event: PluginEvent) -> None:
+                nonlocal event_sequence
                 if event.request_id != request.request_id:
                     raise ValueError("plugin event request_id does not match task request")
+                event_sequence += 1
+                if event.sequence is None:
+                    event = replace(event, sequence=event_sequence)
+                elif event.sequence != event_sequence:
+                    raise ValueError("plugin event sequence is not monotonic")
                 writer.write(encode_message(event.to_message()))
                 await writer.drain()
 
