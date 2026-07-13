@@ -82,6 +82,18 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _bridge_token() -> str | None:
+    token = os.getenv("HERMES_CONTROL_EXTENSION_TOKEN")
+    if token:
+        return token
+    if os.getenv("HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED") == "1":
+        return None
+    raise RuntimeError(
+        "HERMES_CONTROL_EXTENSION_TOKEN is required; set "
+        "HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED=1 only for development"
+    )
+
+
 def _run_bridge() -> None:
     socket_path = os.getenv("HERMES_CONTROL_EXTENSION_SOCKET", "/run/hermes/control-extension.sock")
 
@@ -89,7 +101,7 @@ def _run_bridge() -> None:
         server = HermesExtensionServer(
             socket_path,
             handler_from_environment(),
-            auth_token=os.getenv("HERMES_CONTROL_EXTENSION_TOKEN"),
+            auth_token=_bridge_token(),
             max_message_bytes=_positive_int("HERMES_CONTROL_EXTENSION_MAX_MESSAGE_BYTES", 1_048_576),
             max_concurrent_tasks=_positive_int("HERMES_CONTROL_EXTENSION_MAX_CONCURRENT_TASKS", 4),
         )
