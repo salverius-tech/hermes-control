@@ -134,3 +134,5 @@ See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-bou
 - Do not expose the control API publicly without TLS and strong auth.
 - Keep `CONTROL_API_TOKEN` out of git.
 - The mobile app stores only the companion API URL/token, not lower-level infrastructure credentials.
+- Install repository hooks with `scripts/install-git-hooks.sh`; pre-commit scans staged files and pre-push scans all tracked files.
+- Run `python3 scripts/secret_scan.py --all` before publishing.
