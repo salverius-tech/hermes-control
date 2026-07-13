@@ -5,7 +5,7 @@ import contextlib
 import hmac
 import os
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from .protocol import PluginEvent, PluginRequest, decode_message, encode_message
@@ -27,6 +27,7 @@ class HermesExtensionServer:
     file_mode: int = 0o660
     auth_token: str | None = None
     _server: asyncio.AbstractServer | None = None
+    _client_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False)
 
     async def start(self) -> None:
         if self._server is not None:
@@ -37,6 +38,11 @@ class HermesExtensionServer:
         os.chmod(self.socket_path, self.file_mode)
 
     async def close(self) -> None:
+        client_tasks = tuple(self._client_tasks)
+        for task in client_tasks:
+            task.cancel()
+        if client_tasks:
+            await asyncio.gather(*client_tasks, return_exceptions=True)
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
@@ -45,6 +51,9 @@ class HermesExtensionServer:
             os.unlink(self.socket_path)
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        current_task = asyncio.current_task()
+        if current_task is not None:
+            self._client_tasks.add(current_task)
         request_id = "unknown"
         try:
             line = await reader.readline()
@@ -62,7 +71,20 @@ class HermesExtensionServer:
                 writer.write(encode_message(event.to_message()))
                 await writer.drain()
 
-            result = await self.handler.run(request, emit=emit)
+            handler_task = asyncio.create_task(self.handler.run(request, emit=emit))
+            disconnect_task = asyncio.create_task(reader.read(1))
+            done, _pending = await asyncio.wait(
+                (handler_task, disconnect_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if disconnect_task in done:
+                if not handler_task.done():
+                    handler_task.cancel()
+                    await asyncio.gather(handler_task, return_exceptions=True)
+                return
+            disconnect_task.cancel()
+            await asyncio.gather(disconnect_task, return_exceptions=True)
+            result = handler_task.result()
             await emit(
                 PluginEvent(
                     event_type="completed",
@@ -86,3 +108,5 @@ class HermesExtensionServer:
             writer.close()
             with contextlib.suppress(ConnectionError):
                 await writer.wait_closed()
+            if current_task is not None:
+                self._client_tasks.discard(current_task)

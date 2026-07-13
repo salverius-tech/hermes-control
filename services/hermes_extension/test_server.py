@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from services.control_api.hermes_client import HermesPluginExecutor
 from services.control_api.models import TaskCreateRequest
 from services.hermes_extension import HermesExtensionServer, PluginEvent
+from services.hermes_extension.protocol import PluginRequest, encode_message
 
 
 pytestmark = pytest.mark.unit
@@ -75,3 +77,45 @@ async def test_extension_server_rejects_missing_or_invalid_auth_token(tmp_path):
         await server.close()
 
     assert result.result_summary == "completed: protected"
+
+
+@pytest.mark.anyio
+async def test_client_disconnect_cancels_inflight_handler(tmp_path):
+    socket_path = str(tmp_path / "cancel-extension.sock")
+
+    class BlockingHandler:
+        def __init__(self):
+            self.started = asyncio.Event()
+            self.cancelled = asyncio.Event()
+
+        async def run(self, request, *, emit):
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                self.cancelled.set()
+                raise
+
+    handler = BlockingHandler()
+    server = HermesExtensionServer(socket_path, handler)
+    await server.start()
+    reader, writer = await asyncio.open_unix_connection(socket_path)
+    writer.write(
+        encode_message(
+            PluginRequest(
+                request_id="cancel-1",
+                prompt="cancel me",
+                project_id="default",
+                priority="normal",
+                source="mobile",
+                requires_approval=False,
+            ).to_message()
+        )
+    )
+    await writer.drain()
+    await asyncio.wait_for(handler.started.wait(), timeout=1)
+
+    writer.close()
+    await writer.wait_closed()
+    await asyncio.wait_for(handler.cancelled.wait(), timeout=1)
+    await server.close()
