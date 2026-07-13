@@ -76,6 +76,7 @@ class HermesExtensionServer:
             self._client_tasks.add(current_task)
         request_id = "unknown"
         claimed_request_id: str | None = None
+        emitted_records: list[bytes] = []
         try:
             line = await reader.readline()
             if len(line) > self.max_message_bytes:
@@ -98,7 +99,6 @@ class HermesExtensionServer:
                 raise ValueError("duplicate task request is already running")
             self._active_request_ids.add(request_id)
             claimed_request_id = request_id
-            emitted_records: list[bytes] = []
 
             async def emit(event: PluginEvent) -> None:
                 nonlocal event_sequence
@@ -150,16 +150,17 @@ class HermesExtensionServer:
                     await asyncio.gather(heartbeat_task, return_exceptions=True)
         except Exception as exc:  # noqa: BLE001 - protocol boundary reports handler failures
             with contextlib.suppress(ConnectionError, BrokenPipeError):
-                writer.write(
-                    encode_message(
-                        PluginEvent(
-                            event_type="failed",
-                            request_id=request_id,
-                            error=str(exc),
-                        ).to_message()
-                    )
+                failure_record = encode_message(
+                    PluginEvent(
+                        event_type="failed",
+                        request_id=request_id,
+                        error=str(exc),
+                    ).to_message()
                 )
+                writer.write(failure_record)
                 await writer.drain()
+                if claimed_request_id is not None:
+                    self._store_replay(request_id, [*emitted_records, failure_record])
         finally:
             writer.close()
             with contextlib.suppress(ConnectionError):
