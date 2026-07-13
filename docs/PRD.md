@@ -264,8 +264,8 @@ Implementation direction:
 
 | ID | Requirement | Priority | Status |
 |---|---|---:|---|
-| E-PLUGIN-1 | Replace or augment CLI wrapping with a structured Hermes-side plugin. | Could | In progress |
-| E-PLUGIN-2 | Emit structured task lifecycle events directly to Control API. | Could | In progress |
+| E-PLUGIN-1 | Replace or augment CLI wrapping with a structured Hermes-side plugin. | Could | Bridge implemented; native task hook unavailable in current Hermes plugin API |
+| E-PLUGIN-2 | Emit structured task lifecycle events directly to Control API. | Could | Bridge implemented; native lifecycle source remains upstream-dependent |
 | E-PLUGIN-3 | Emit structured tool-call reporting and intermediate outputs. | Could | Proposed |
 | E-PLUGIN-4 | Keep CLI execution mode as fallback. | Must | Required for compatibility |
 
@@ -334,8 +334,7 @@ Implementation direction:
 10. Multi-agent orchestration dashboard.
 11. Multiple users/devices with stronger auth, rate limits, and audit logs.
 12. Rich artifact browsing for generated files, links, screenshots, and media.
-13. Hermes Control Extension bundle with structured plugin bridge alongside CLI fallback.
-14. Optional integration with future Hermes API/gateway surfaces in place of CLI command execution.
+13. Optional integration with future Hermes API/gateway surfaces in place of CLI command execution.
 
 ## 9. UX requirements
 
@@ -411,8 +410,8 @@ Mobile-focused checks:
 
 ```bash
 cd apps/mobile
-npm run typecheck
-npm run test:unit
+pnpm run typecheck
+pnpm run test:unit
 ```
 
 Device/deployment checks, deferred until the user can provide phone/LXC access:

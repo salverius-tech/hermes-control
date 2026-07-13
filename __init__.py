@@ -75,6 +75,13 @@ def _handle_control(args: dict[str, Any], **_: Any) -> str:
     return _control_api(args)
 
 
+def _positive_int(name: str, default: int) -> int:
+    value = int(os.getenv(name, str(default)))
+    if value < 1:
+        raise ValueError(f"{name} must be positive")
+    return value
+
+
 def _run_bridge() -> None:
     socket_path = os.getenv("HERMES_CONTROL_EXTENSION_SOCKET", "/run/hermes/control-extension.sock")
 
@@ -83,6 +90,8 @@ def _run_bridge() -> None:
             socket_path,
             handler_from_environment(),
             auth_token=os.getenv("HERMES_CONTROL_EXTENSION_TOKEN"),
+            max_message_bytes=_positive_int("HERMES_CONTROL_EXTENSION_MAX_MESSAGE_BYTES", 1_048_576),
+            max_concurrent_tasks=_positive_int("HERMES_CONTROL_EXTENSION_MAX_CONCURRENT_TASKS", 4),
         )
         await server.start()
         await asyncio.Event().wait()

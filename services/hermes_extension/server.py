@@ -26,14 +26,20 @@ class HermesExtensionServer:
     handler: HermesTaskHandler
     file_mode: int = 0o660
     auth_token: str | None = None
+    max_message_bytes: int = 1_048_576
+    max_concurrent_tasks: int = 4
     _server: asyncio.AbstractServer | None = None
     _client_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False)
+    _task_slots: asyncio.Semaphore | None = field(default=None, init=False)
 
     async def start(self) -> None:
         if self._server is not None:
             return
         with contextlib.suppress(FileNotFoundError):
             os.unlink(self.socket_path)
+        if self.max_message_bytes < 1 or self.max_concurrent_tasks < 1:
+            raise ValueError("bridge limits must be positive")
+        self._task_slots = asyncio.Semaphore(self.max_concurrent_tasks)
         self._server = await asyncio.start_unix_server(self._handle_client, path=self.socket_path)
         os.chmod(self.socket_path, self.file_mode)
 
@@ -57,6 +63,8 @@ class HermesExtensionServer:
         request_id = "unknown"
         try:
             line = await reader.readline()
+            if len(line) > self.max_message_bytes:
+                raise ValueError("bridge message exceeds configured size limit")
             message = decode_message(line)
             if message.get("type") != "task.submit":
                 raise ValueError("expected task.submit message")
@@ -71,7 +79,9 @@ class HermesExtensionServer:
                 writer.write(encode_message(event.to_message()))
                 await writer.drain()
 
-            handler_task = asyncio.create_task(self.handler.run(request, emit=emit))
+            if self._task_slots is None:
+                raise RuntimeError("extension bridge is not started")
+            handler_task = asyncio.create_task(self._run_handler(request, emit))
             disconnect_task = asyncio.create_task(reader.read(1))
             done, _pending = await asyncio.wait(
                 (handler_task, disconnect_task),
@@ -110,3 +120,8 @@ class HermesExtensionServer:
                 await writer.wait_closed()
             if current_task is not None:
                 self._client_tasks.discard(current_task)
+
+    async def _run_handler(self, request: PluginRequest, emit: PluginEventSink) -> str:
+        assert self._task_slots is not None
+        async with self._task_slots:
+            return await self.handler.run(request, emit=emit)

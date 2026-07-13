@@ -119,3 +119,20 @@ async def test_client_disconnect_cancels_inflight_handler(tmp_path):
     await writer.wait_closed()
     await asyncio.wait_for(handler.cancelled.wait(), timeout=1)
     await server.close()
+
+
+@pytest.mark.anyio
+async def test_extension_server_rejects_invalid_resource_limits(tmp_path):
+    with pytest.raises(ValueError, match="bridge limits must be positive"):
+        await HermesExtensionServer(
+            str(tmp_path / "invalid.sock"),
+            RecordingHandler(),
+            max_message_bytes=0,
+        ).start()
+
+    with pytest.raises(ValueError, match="bridge limits must be positive"):
+        await HermesExtensionServer(
+            str(tmp_path / "invalid.sock"),
+            RecordingHandler(),
+            max_concurrent_tasks=0,
+        ).start()
