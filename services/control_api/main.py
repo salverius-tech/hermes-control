@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import secrets
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 
 from .auth import expected_token, require_auth
 from .hermes_client import HermesTaskService
 from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskSummary
 from .notifications import notifier_from_environment
 from .projection import TaskProjection
+from .rate_limit import RateLimiter
 from .storage import SQLiteTaskStore
 from .websocket import ConnectionManager
 
@@ -24,7 +25,13 @@ def create_app() -> FastAPI:
         notifier=notifier_from_environment(),
         max_concurrent_tasks=int(os.getenv("CONTROL_API_MAX_CONCURRENT_TASKS", "4")),
     )
+    task_rate_limiter = RateLimiter(int(os.getenv("CONTROL_API_RATE_LIMIT_PER_MINUTE", "60")))
     connections = ConnectionManager()
+
+    def enforce_task_rate_limit(request: Request) -> None:
+        client = request.client.host if request.client is not None else "unknown"
+        if not task_rate_limiter.allow(client):
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Task request rate limit exceeded")
 
     async def broadcast_task_update(task: TaskSummary) -> None:
         await connections.broadcast_task_updated(task)
@@ -63,7 +70,7 @@ def create_app() -> FastAPI:
     def list_tasks() -> list[TaskSummary]:
         return projection.list_tasks()
 
-    @app.post("/tasks", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth)])
+    @app.post("/tasks", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
     async def create_task(request: TaskCreateRequest) -> TaskSummary:
         task = await task_service.submit_task(request, on_update=broadcast_task_update)
         await connections.broadcast_task_created(task)
@@ -97,7 +104,7 @@ def create_app() -> FastAPI:
         task = await task_service.cancel_task(task_id, on_update=broadcast_task_update)
         return task
 
-    @app.post("/tasks/{task_id}/retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth)])
+    @app.post("/tasks/{task_id}/retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
     async def retry_task(task_id: str) -> TaskSummary:
         original = projection.get_task(task_id)
         if original is None:
