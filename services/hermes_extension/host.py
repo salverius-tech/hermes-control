@@ -35,7 +35,7 @@ class SubprocessHermesTaskHandler:
     timeout_seconds: float = 900
 
     async def run(self, request: PluginRequest, *, emit: PluginEventSink) -> str:
-        query_mode = self.command[-1:] in (("-q",), ("--query",))
+        query_mode = any(argument in {"-q", "--query"} for argument in self.command)
         command = (*self.command, request.prompt) if query_mode else self.command
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -81,5 +81,8 @@ class SubprocessHermesTaskHandler:
 
 
 def handler_from_environment() -> SubprocessHermesTaskHandler:
-    command = os.getenv("HERMES_CONTROL_EXTENSION_HERMES_COMMAND", "hermes chat -q")
+    command = os.getenv(
+        "HERMES_CONTROL_EXTENSION_HERMES_COMMAND",
+        "hermes chat -q --ignore-user-config --ignore-rules",
+    )
     return SubprocessHermesTaskHandler(tuple(shlex.split(command, posix=os.name != "nt")))

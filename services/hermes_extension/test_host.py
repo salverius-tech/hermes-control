@@ -2,7 +2,11 @@ import sys
 
 import pytest
 
-from services.hermes_extension.host import NativeHermesTaskHandler, SubprocessHermesTaskHandler
+from services.hermes_extension.host import (
+    NativeHermesTaskHandler,
+    SubprocessHermesTaskHandler,
+    handler_from_environment,
+)
 from services.hermes_extension.protocol import PluginRequest
 
 
@@ -60,6 +64,20 @@ async def test_subprocess_handler_appends_prompt_for_query_mode():
     )
 
     assert result == "query:inspect this"
+
+
+def test_default_handler_disables_recursive_plugin_loading(monkeypatch):
+    monkeypatch.delenv("HERMES_CONTROL_EXTENSION_HERMES_COMMAND", raising=False)
+
+    handler = handler_from_environment()
+
+    assert handler.command == (
+        "hermes",
+        "chat",
+        "-q",
+        "--ignore-user-config",
+        "--ignore-rules",
+    )
 
 
 @pytest.mark.anyio
