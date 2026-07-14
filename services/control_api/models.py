@@ -63,6 +63,9 @@ class TaskSummary(BaseModel):
     progress_log: list[str] = Field(default_factory=list)
     result_summary: str | None = None
     error: str | None = None
+    blocker_category: str | None = None
+    blocker_message: str | None = None
+    blocker_retryable: bool = False
     parent_task_id: str | None = None
     root_task_id: str | None = None
     session_id: str | None = None
@@ -136,6 +139,7 @@ class GuidanceRequest(BaseModel):
     prompt: str = Field(min_length=1)
     requires_approval: bool = False
     new_session: bool = False
+    relation: Literal["continuation", "edited_retry", "follow_up"] = "continuation"
 
     @field_validator("prompt")
     @classmethod

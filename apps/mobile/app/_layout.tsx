@@ -32,7 +32,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ ...defaultScreenOptions, title: 'Hermes Control' }} />
-        <Stack.Screen name="tasks/index" options={{ title: 'Tasks' }} />
+        <Stack.Screen name="attention" options={{ title: 'Needs Attention' }} />
         <Stack.Screen name="tasks/[taskId]" options={{ title: 'Task Detail' }} />
         <Stack.Screen name="projects/index" options={{ title: 'Projects' }} />
         <Stack.Screen name="projects/manage" options={{ title: 'Manage Project' }} />

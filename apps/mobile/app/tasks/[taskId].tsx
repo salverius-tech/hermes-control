@@ -25,6 +25,7 @@ export default function TaskDetailScreen() {
   const [actionPending, setActionPending] = useState(false);
   const [guidance, setGuidance] = useState('');
   const [editingRetry, setEditingRetry] = useState(false);
+  const [continuationMode, setContinuationMode] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -103,7 +104,7 @@ export default function TaskDetailScreen() {
       setActionPending(true);
       const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/continue`, {
         method: 'POST',
-        body: JSON.stringify({ prompt: guidance.trim(), new_session: true }),
+        body: JSON.stringify({ prompt: guidance.trim(), new_session: !continuationMode, relation: continuationMode ? 'continuation' : 'edited_retry' }),
       });
       router.replace(`/tasks/${next.task_id}`);
     } catch (err) {
@@ -168,7 +169,7 @@ export default function TaskDetailScreen() {
                   <Pressable
                     accessibilityRole="button"
                     disabled={actionPending}
-                    onPress={() => { setEditingRetry(true); setGuidance(task.prompt); }}
+                    onPress={() => { setContinuationMode(false); setEditingRetry(true); setGuidance(task.prompt); }}
                     style={[styles.button, actionPending && styles.disabledButton]}
                     testID="task-edit-retry"
                   >
@@ -177,7 +178,7 @@ export default function TaskDetailScreen() {
                   <Pressable
                     accessibilityRole="button"
                     disabled={actionPending}
-                    onPress={() => { setGuidance(''); void submitContinuation(false); }}
+                    onPress={() => { setContinuationMode(true); setGuidance(''); setEditingRetry(true); }}
                     style={[styles.button, actionPending && styles.disabledButton]}
                     testID="task-continue"
                   >
@@ -189,15 +190,22 @@ export default function TaskDetailScreen() {
           </MetricCard>
 
           {editingRetry ? (
-            <MetricCard title="Edit before retry" subtitle="The original task remains unchanged; this creates a linked task.">
+            <MetricCard title={continuationMode ? 'Continue Hermes session' : 'Edit before retry'} subtitle="The original task remains unchanged; this creates a linked task.">
               <TextInput multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
-              <Pressable disabled={actionPending || !guidance.trim()} onPress={submitEditedRetry} style={[styles.button, (!guidance.trim() || actionPending) && styles.disabledButton]} testID="task-submit-edited-retry"><Text style={styles.buttonText}>Submit edited retry</Text></Pressable>
+              <Pressable disabled={actionPending || !guidance.trim()} onPress={submitEditedRetry} style={[styles.button, (!guidance.trim() || actionPending) && styles.disabledButton]} testID="task-submit-edited-retry"><Text style={styles.buttonText}>{continuationMode ? 'Send guidance' : 'Submit edited retry'}</Text></Pressable>
             </MetricCard>
           ) : null}
 
           {task.result_summary ? (
             <MetricCard title="Result">
               <Text style={styles.bodyText}>{task.result_summary}</Text>
+            </MetricCard>
+          ) : null}
+
+          {task.blocker_message ? (
+            <MetricCard title="Hermes needs attention" subtitle={task.blocker_category || 'blocked'}>
+              <Text style={styles.error}>{task.blocker_message}</Text>
+              <Text style={styles.muted}>{task.blocker_retryable ? 'Check the environment, then continue or retry.' : 'Review the task before deciding what to do next.'}</Text>
             </MetricCard>
           ) : null}
 

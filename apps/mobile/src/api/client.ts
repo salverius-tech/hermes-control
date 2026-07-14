@@ -17,6 +17,9 @@ export type TaskSummary = {
   progress_log: string[];
   result_summary?: string | null;
   error?: string | null;
+  blocker_category?: string | null;
+  blocker_message?: string | null;
+  blocker_retryable?: boolean;
   parent_task_id?: string | null;
   root_task_id?: string | null;
   session_id?: string | null;

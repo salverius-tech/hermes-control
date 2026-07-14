@@ -98,6 +98,9 @@ class TaskProjection:
         result_summary: str | None = None,
         error: str | None = None,
         session_id: str | None = None,
+        blocker_category: str | None = None,
+        blocker_message: str | None = None,
+        blocker_retryable: bool = False,
         event_type: str = "task.updated",
     ) -> TaskSummary:
         task = self._tasks[task_id]
@@ -112,6 +115,10 @@ class TaskProjection:
             update_data["error"] = error
         if session_id is not None:
             update_data["session_id"] = session_id
+        if blocker_category is not None:
+            update_data["blocker_category"] = blocker_category
+            update_data["blocker_message"] = blocker_message or error
+            update_data["blocker_retryable"] = blocker_retryable
         update_data["updated_at"] = datetime.now(timezone.utc)
         updated = TaskSummary(**update_data)
         self._tasks[task_id] = updated

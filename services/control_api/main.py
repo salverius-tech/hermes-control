@@ -162,7 +162,7 @@ def create_app() -> FastAPI:
             parent_task_id=original.task_id,
             root_task_id=original.root_task_id or original.task_id,
             session_id=None if request.new_session else original.session_id,
-            relation="follow_up" if request.new_session else "continuation",
+            relation=request.relation,
         )
         task_request = resolve_project_context(task_request)
         task = await task_service.submit_task(task_request, on_update=broadcast_task_update)
@@ -183,6 +183,10 @@ def create_app() -> FastAPI:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         return projection.list_task_events(task_id)
+
+    @app.get("/attention", dependencies=[Depends(require_auth)])
+    def list_attention() -> list[TaskSummary]:
+        return [task for task in projection.list_tasks() if task.status in {"awaiting_approval", "failed", "blocked"}]
 
     @app.get("/projects", dependencies=[Depends(require_auth)])
     def list_projects(include_archived: bool = False) -> list[ProjectSummary]:

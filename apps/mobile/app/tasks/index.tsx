@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
 import { apiFetch, TaskStatus, TaskSummary } from '@/api/client';
+import { createEventsSocket, parseLiveEvent } from '@/api/events';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { StatusPill } from '@/components/StatusPill';
 import { useSettingsStore } from '@/state/settings';
@@ -54,7 +55,17 @@ export default function TasksScreen() {
     if (!apiToken) { setLoading(false); return; }
     void loadTasks();
     const interval = setInterval(() => void loadTasks(), 15000);
-    return () => clearInterval(interval);
+    const socket = createEventsSocket(apiUrl, apiToken);
+    socket.onmessage = (message) => {
+      const event = parseLiveEvent(message.data);
+      if (!event) return;
+      if (event.type === 'snapshot') setTasks(event.tasks);
+      if (event.type === 'task.created' || event.type === 'task.updated') {
+        setTasks((current) => [event.task, ...current.filter((task) => task.task_id !== event.task.task_id)]);
+      }
+    };
+    socket.onerror = () => socket.close();
+    return () => { clearInterval(interval); socket.close(); };
   }, [apiToken, apiUrl]);
 
   const visibleTasks = useMemo(() => tasks.filter((task) => {

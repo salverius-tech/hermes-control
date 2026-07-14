@@ -195,6 +195,17 @@ def _session_id_from_output(output: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _classify_failure(message: str) -> tuple[str, bool]:
+    lowered = message.lower()
+    if "connection refused" in lowered or "timed out" in lowered or "socket" in lowered:
+        return "connectivity", True
+    if "does not exist" in lowered or "folder" in lowered or "directory" in lowered:
+        return "project_context", True
+    if "permission denied" in lowered:
+        return "permission", True
+    return "execution", False
+
+
 def executor_from_environment() -> HermesExecutor:
     plugin_socket = os.getenv("CONTROL_API_HERMES_PLUGIN_SOCKET")
     if plugin_socket:
@@ -309,8 +320,17 @@ class HermesTaskService:
                 await on_update(canceled)
             return canceled
         except Exception as exc:  # noqa: BLE001 - boundary converts adapter failures to task state
-            failed = self.projection.update_task(task_id, status=TaskStatus.FAILED, error=str(exc), event_type="task.failed")
-            await self.notify_task(failed, event_type="task.failed")
+            category, blocked = _classify_failure(str(exc))
+            failed = self.projection.update_task(
+                task_id,
+                status=TaskStatus.BLOCKED if blocked else TaskStatus.FAILED,
+                error=str(exc),
+                blocker_category=category if blocked else None,
+                blocker_message=str(exc) if blocked else None,
+                blocker_retryable=blocked,
+                event_type="task.blocked" if blocked else "task.failed",
+            )
+            await self.notify_task(failed, event_type="task.blocked" if blocked else "task.failed")
             if on_update is not None:
                 await on_update(failed)
             return failed
