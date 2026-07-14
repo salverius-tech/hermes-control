@@ -35,18 +35,21 @@ class SubprocessHermesTaskHandler:
     timeout_seconds: float = 900
 
     async def run(self, request: PluginRequest, *, emit: PluginEventSink) -> str:
+        query_mode = self.command[-1:] in (("-q",), ("--query",))
+        command = (*self.command, request.prompt) if query_mode else self.command
         process = await asyncio.create_subprocess_exec(
-            *self.command,
-            stdin=asyncio.subprocess.PIPE,
+            *command,
+            stdin=asyncio.subprocess.PIPE if not query_mode else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        assert process.stdin is not None
         assert process.stdout is not None
         assert process.stderr is not None
-        process.stdin.write(request.prompt.encode())
-        await process.stdin.drain()
-        process.stdin.close()
+        if not query_mode:
+            assert process.stdin is not None
+            process.stdin.write(request.prompt.encode())
+            await process.stdin.drain()
+            process.stdin.close()
 
         async def read_stream(stream: asyncio.StreamReader) -> list[str]:
             lines: list[str] = []

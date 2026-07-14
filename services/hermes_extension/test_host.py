@@ -41,6 +41,28 @@ async def test_subprocess_handler_forwards_output_and_returns_stdout():
 
 
 @pytest.mark.anyio
+async def test_subprocess_handler_appends_prompt_for_query_mode():
+    handler = SubprocessHermesTaskHandler(
+        (
+            sys.executable,
+            "-c",
+            "import sys; print('query:' + sys.argv[-1])",
+            "-q",
+        )
+    )
+
+    async def emit(_event):
+        return None
+
+    result = await handler.run(
+        PluginRequest("req-query", "inspect this", "default", "normal", "mobile", False),
+        emit=emit,
+    )
+
+    assert result == "query:inspect this"
+
+
+@pytest.mark.anyio
 async def test_native_handler_delegates_to_injected_supported_runner():
     events = []
 
