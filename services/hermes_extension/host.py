@@ -51,19 +51,40 @@ class SubprocessHermesTaskHandler:
             await process.stdin.drain()
             process.stdin.close()
 
-        async def read_stream(stream: asyncio.StreamReader) -> list[str]:
+        completion_event = asyncio.Event()
+
+        async def read_stream(stream: asyncio.StreamReader, *, is_stdout: bool = False) -> list[str]:
             lines: list[str] = []
             async for raw_line in stream:
                 line = raw_line.decode(errors="replace").strip()
                 if line:
                     lines.append(line)
                     await emit(PluginEvent(event_type="progress", request_id=request.request_id, message=line))
+                    if is_stdout and line.startswith("Session:"):
+                        completion_event.set()
             return lines
 
-        stdout_task = asyncio.create_task(read_stream(process.stdout))
+        stdout_task = asyncio.create_task(read_stream(process.stdout, is_stdout=True))
         stderr_task = asyncio.create_task(read_stream(process.stderr))
+        process_wait_task = asyncio.create_task(process.wait())
+        completion_wait_task = asyncio.create_task(completion_event.wait())
+        completed_from_footer = False
         try:
-            await asyncio.wait_for(process.wait(), timeout=self.timeout_seconds)
+            done, _pending = await asyncio.wait(
+                (process_wait_task, completion_wait_task),
+                timeout=self.timeout_seconds,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                raise TimeoutError
+            if completion_wait_task in done and process.returncode is None:
+                completed_from_footer = True
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process_wait_task, timeout=5)
+                except TimeoutError:
+                    process.kill()
+                    await process_wait_task
             stdout_lines, stderr_lines = await asyncio.gather(stdout_task, stderr_task)
         except BaseException:
             if process.returncode is None:
@@ -72,9 +93,17 @@ class SubprocessHermesTaskHandler:
             for task in (stdout_task, stderr_task):
                 task.cancel()
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
+            for task in (process_wait_task, completion_wait_task):
+                task.cancel()
+            await asyncio.gather(process_wait_task, completion_wait_task, return_exceptions=True)
             raise
+        finally:
+            for task in (process_wait_task, completion_wait_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(process_wait_task, completion_wait_task, return_exceptions=True)
 
-        if process.returncode != 0:
+        if process.returncode != 0 and not completed_from_footer:
             detail = "\n".join(stderr_lines or stdout_lines) or f"Hermes command exited with {process.returncode}"
             raise RuntimeError(detail)
         return "\n".join(stdout_lines) or "Hermes command completed"

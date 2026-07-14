@@ -66,6 +66,29 @@ async def test_subprocess_handler_appends_prompt_for_query_mode():
     assert result == "query:inspect this"
 
 
+@pytest.mark.anyio
+async def test_subprocess_handler_completes_on_hermes_session_footer():
+    handler = SubprocessHermesTaskHandler(
+        (
+            sys.executable,
+            "-u",
+            "-c",
+            "import time; print('result'); print('Session: test'); time.sleep(30)",
+        ),
+        timeout_seconds=10,
+    )
+
+    async def emit(_event):
+        return None
+
+    result = await handler.run(
+        PluginRequest("req-footer", "inspect", "default", "normal", "mobile", False),
+        emit=emit,
+    )
+
+    assert result == "result\nSession: test"
+
+
 def test_default_handler_disables_recursive_plugin_loading(monkeypatch):
     monkeypatch.delenv("HERMES_CONTROL_EXTENSION_HERMES_COMMAND", raising=False)
 
