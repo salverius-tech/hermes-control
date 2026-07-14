@@ -65,9 +65,14 @@ class LocalHermesCommandExecutor:
     timeout_seconds: float = 900
 
     async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult:
+        query_mode = any(argument in {"-q", "--query"} for argument in self.command)
+        base_command = self.command
+        if request.session_id and len(base_command) >= 2 and base_command[0] == "hermes" and base_command[1] == "chat":
+            base_command = ("hermes", "chat", "--resume", request.session_id, *base_command[2:])
+        command = (*base_command, request.prompt) if query_mode else base_command
         process = await asyncio.create_subprocess_exec(
-            *self.command,
-            stdin=asyncio.subprocess.PIPE,
+            *command,
+            stdin=asyncio.subprocess.DEVNULL if query_mode else asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=request.execution_folder,
@@ -90,10 +95,11 @@ class LocalHermesCommandExecutor:
                     await on_log(message)
 
         async def run_process() -> None:
-            assert process.stdin is not None
-            process.stdin.write(request.prompt.encode("utf-8"))
-            await process.stdin.drain()
-            process.stdin.close()
+            if not query_mode:
+                assert process.stdin is not None
+                process.stdin.write(request.prompt.encode("utf-8"))
+                await process.stdin.drain()
+                process.stdin.close()
             readers = [
                 asyncio.create_task(read_stream(process.stdout, stdout_lines)),
                 asyncio.create_task(read_stream(process.stderr, stderr_lines)),

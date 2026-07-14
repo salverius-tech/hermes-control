@@ -164,6 +164,17 @@ async def test_local_command_executor_sends_prompt_on_stdin_and_captures_stderr_
 
 
 @pytest.mark.anyio
+async def test_local_command_executor_passes_query_prompt_as_argument():
+    executor = LocalHermesCommandExecutor(
+        (sys.executable, "-c", "import sys; print(sys.argv[-1])", "-q"),
+    )
+
+    result = await executor.run(TaskCreateRequest(prompt="query argument"))
+
+    assert result.result_summary == "query argument"
+
+
+@pytest.mark.anyio
 async def test_local_command_executor_raises_stderr_for_nonzero_exit():
     executor = LocalHermesCommandExecutor(
         (sys.executable, "-c", "import sys; print('bad command', file=sys.stderr); raise SystemExit(7)")
