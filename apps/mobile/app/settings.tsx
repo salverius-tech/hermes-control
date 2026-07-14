@@ -7,6 +7,7 @@ import { ActionButton } from '@/components/ActionButton';
 import { MetricCard } from '@/components/MetricCard';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useSettingsStore } from '@/state/settings';
+import { useDataStore } from '@/state/data-store';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function SettingsScreen() {
@@ -16,6 +17,7 @@ export default function SettingsScreen() {
   const [draftToken, setDraftToken] = useState(apiToken);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const { websocket, lastSync, offline, stale } = useDataStore();
 
   async function saveSettings() {
     setSaveMessage('Saving settings...');
@@ -72,6 +74,12 @@ export default function SettingsScreen() {
           <Text style={styles.help}>Events: {diagnostics.websocket_path}</Text>
         </MetricCard>
       ) : null}
+      <MetricCard title="Connection state">
+        <Text style={styles.help}>Authentication: {draftToken.trim() ? 'configured' : 'not configured'}</Text>
+        <Text style={styles.help}>WebSocket: {websocket}</Text>
+        <Text style={styles.help}>Last successful sync: {lastSync ? new Date(lastSync).toLocaleString() : 'not yet'}</Text>
+        <Text style={styles.help}>Data: {offline || stale ? 'offline/stale' : 'current'}</Text>
+      </MetricCard>
       <Text style={styles.help}>Use your PC LAN IP or Tailscale host when testing from a physical Android device.</Text>
     </ScrollView>
   );

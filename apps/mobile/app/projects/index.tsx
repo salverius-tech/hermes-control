@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
@@ -58,7 +58,7 @@ export default function ProjectsScreen() {
           <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
             <Text style={styles.title}>{project.name}</Text>
             <Text style={styles.id}>{project.project_id}</Text>
-            {project.primary_folder ? <Text style={styles.folder}>{project.primary_folder}</Text> : null}
+            {project.primary_folder ? <Text style={styles.id}>{project.primary_folder}</Text> : null}
             <Text style={styles.counts}>
               {project.running_count} running · {project.queued_count} queued · {project.completed_count} done · {project.failed_count} failed
             </Text>
