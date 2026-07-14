@@ -74,9 +74,9 @@ def test_default_handler_disables_recursive_plugin_loading(monkeypatch):
     assert handler.command == (
         "hermes",
         "chat",
-        "-q",
         "--ignore-user-config",
         "--ignore-rules",
+        "-q",
     )
 
 

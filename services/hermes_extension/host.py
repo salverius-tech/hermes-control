@@ -83,6 +83,6 @@ class SubprocessHermesTaskHandler:
 def handler_from_environment() -> SubprocessHermesTaskHandler:
     command = os.getenv(
         "HERMES_CONTROL_EXTENSION_HERMES_COMMAND",
-        "hermes chat -q --ignore-user-config --ignore-rules",
+        "hermes chat --ignore-user-config --ignore-rules -q",
     )
     return SubprocessHermesTaskHandler(tuple(shlex.split(command, posix=os.name != "nt")))
