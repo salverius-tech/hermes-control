@@ -177,12 +177,51 @@ Errors:
 
 - `404` when the task id is unknown.
 
-### `GET /projects`
+### `GET /attention`
 
-Returns project summaries derived from task counts. If no tasks exist, returns a default project shell.
+Returns tasks requiring operator attention: approval requests, blockers, and failures.
 
 Auth: required.
 
+The response is a list of `TaskSummary` objects. Clients may persist local read state keyed by `task_id` and `updated_at`; the API currently exposes task attention state, not notification read state.
+
+### `GET /projects`
+
+Returns Hermes-native project summaries when `CONTROL_API_HERMES_HOME` is configured. Task-derived projects are retained as a fallback for development and tests.
+
+Auth: required.
+
+Use `?include_archived=true` to include archived Hermes projects.
+
+Project selection is request context only. It does not call `hermes project use` or modify Hermes' global active project.
+
+### `GET /projects/{project_id}`
+
+Returns one Hermes-native project, including its primary folder and folder membership.
+
+### `POST /projects`
+
+Creates a Hermes-native project. Folder paths are validated against `CONTROL_API_PROJECT_ROOTS`.
+
+### `PATCH /projects/{project_id}`
+
+Renames, archives/restores, or changes the primary folder for a project.
+
+### `POST /projects/{project_id}/folders`
+
+Adds a validated folder to a project.
+
+### `DELETE /projects/{project_id}/folders`
+
+Removes a validated folder from a project.
+
+### `GET /folders`
+
+Lists directories available under the configured approved roots. Pass `path` to browse a permitted directory.
+
+### `GET /sessions`
+
+Returns Hermes session summaries. Pass `project_id` to filter sessions by project context.
 ### `GET /agents`
 
 Returns known companion-agent status. Current response includes the local `hermes-agent` until deeper Hermes agent discovery is configured.
