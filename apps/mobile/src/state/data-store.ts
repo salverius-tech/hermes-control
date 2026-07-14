@@ -12,6 +12,7 @@ export const isAttentionTask = (task: TaskSummary) => ['awaiting_approval', 'blo
 function attentionItems(tasks: TaskSummary[]) { return tasks.filter(isAttentionTask); }
 function mergeTask(tasks: TaskSummary[], next: TaskSummary) { return [next, ...tasks.filter((task) => task.task_id !== next.task_id)]; }
 async function readSeen(): Promise<Record<string, string>> { try { return JSON.parse((await AsyncStorage.getItem(ATTENTION_KEY)) || '{}') as Record<string, string>; } catch { return {}; } }
+async function unreadCount(tasks: TaskSummary[]): Promise<number> { const seen = await readSeen(); return attentionItems(tasks).filter((task) => seen[task.task_id] !== task.updated_at).length; }
 
 type DataState = {
   tasks: TaskSummary[]; projects: ProjectSummary[]; sessions: SessionSummary[]; agents: AgentStatus[]; attention: TaskSummary[]; diagnostics: Diagnostics | null;
@@ -28,8 +29,8 @@ export const useDataStore = create<DataState>((set, get) => ({
         apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks'), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
         apiFetch<SessionSummary[]>(apiUrl, apiToken, '/sessions'), apiFetch<AgentStatus[]>(apiUrl, apiToken, '/agents'), apiFetch<Diagnostics>(apiUrl, apiToken, '/diagnostics'),
       ]);
-      const attention = attentionItems(tasks); const seen = await readSeen();
-      const data = { tasks, projects, sessions, agents, attention, diagnostics, lastSync: new Date().toISOString(), stale: false, offline: false, unreadAttention: attention.filter((item) => seen[item.task_id] !== item.updated_at).length };
+      const attention = attentionItems(tasks);
+      const data = { tasks, projects, sessions, agents, attention, diagnostics, lastSync: new Date().toISOString(), stale: false, offline: false, unreadAttention: await unreadCount(tasks) };
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data)); set(data);
     } catch {
       try { const cached = await AsyncStorage.getItem(CACHE_KEY); if (cached) set({ ...(JSON.parse(cached) as DataState), stale: true, offline: true }); else set({ stale: true, offline: true }); } catch { set({ stale: true, offline: true }); }
@@ -40,8 +41,14 @@ export const useDataStore = create<DataState>((set, get) => ({
     set({ websocket: 'connecting' }); const socket = createEventsSocket(apiUrl, apiToken);
     socket.onopen = () => set({ websocket: 'connected' }); socket.onclose = () => set({ websocket: 'disconnected' }); socket.onerror = () => socket.close();
     socket.onmessage = (message) => { const event = parseLiveEvent(typeof message.data === 'string' ? message.data : ''); if (!event) return;
-      if (event.type === 'snapshot') set({ tasks: event.tasks, projects: event.projects, agents: event.agents, attention: attentionItems(event.tasks) });
-      else set((state) => { const tasks = mergeTask(state.tasks, event.task); return { tasks, attention: attentionItems(tasks), stale: false, offline: false }; });
+      if (event.type === 'snapshot') {
+        const attention = attentionItems(event.tasks);
+        set({ tasks: event.tasks, projects: event.projects, agents: event.agents, attention, stale: false, offline: false });
+        void unreadCount(event.tasks).then((unreadAttention) => set({ unreadAttention }));
+      } else {
+        set((state) => { const tasks = mergeTask(state.tasks, event.task); return { tasks, attention: attentionItems(tasks), stale: false, offline: false }; });
+        void unreadCount(mergeTask(get().tasks, event.task)).then((unreadAttention) => set({ unreadAttention }));
+      }
     }; return () => socket.close();
   },
   async markAttentionSeen(taskId) { const seen = await readSeen(); const item = get().attention.find((task) => task.task_id === taskId); if (item) seen[taskId] = item.updated_at; await AsyncStorage.setItem(ATTENTION_KEY, JSON.stringify(seen)); set({ unreadAttention: get().attention.filter((task) => seen[task.task_id] !== task.updated_at).length }); },
