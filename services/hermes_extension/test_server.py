@@ -9,7 +9,10 @@ from services.hermes_extension import HermesExtensionServer, PluginEvent
 from services.hermes_extension.protocol import PluginRequest, encode_message
 
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(os.name == "nt", reason="Unix-domain extension bridge is not available on Windows"),
+]
 
 
 class RecordingHandler:

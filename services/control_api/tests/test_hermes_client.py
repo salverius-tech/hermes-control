@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 
 import pytest
@@ -212,6 +213,7 @@ async def test_local_command_executor_streams_output_before_process_exits():
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(os.name == "nt", reason="Unix-domain extension bridge is not available on Windows")
 async def test_plugin_executor_round_trips_structured_task_and_progress(tmp_path):
     socket_path = str(tmp_path / "hermes-extension.sock")
     received = {}
