@@ -49,6 +49,40 @@ def test_task_summary_accepts_supported_statuses():
     assert summary.status == TaskStatus.RUNNING
 
 
+def test_task_summary_accepts_blocker_metadata():
+    summary = TaskSummary(
+        task_id="task-blocked",
+        title="Blocked task",
+        prompt="Run checks",
+        status=TaskStatus.BLOCKED,
+        project_id="default",
+        blocker_category="connection",
+        blocker_message="Hermes bridge unavailable",
+        blocker_retryable=True,
+    )
+
+    assert summary.status == TaskStatus.BLOCKED
+    assert summary.blocker_category == "connection"
+    assert summary.blocker_retryable is True
+
+
+def test_task_create_request_preserves_recovery_relation_and_context():
+    request = TaskCreateRequest(
+        prompt="Continue the work",
+        project_id="hermes-control",
+        execution_folder="/home/anvil/repos/hermes-control",
+        session_id="session-123",
+        parent_task_id="task-parent",
+        root_task_id="task-root",
+        relation="continuation",
+    )
+
+    assert request.project_id == "hermes-control"
+    assert request.execution_folder == "/home/anvil/repos/hermes-control"
+    assert request.session_id == "session-123"
+    assert request.relation == "continuation"
+
+
 def test_task_summary_rejects_unknown_status():
     with pytest.raises(ValidationError):
         TaskSummary(
