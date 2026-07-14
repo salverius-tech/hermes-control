@@ -10,9 +10,9 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-if __package__:
+try:
     from .services.hermes_extension import HermesExtensionServer, handler_from_environment
-else:
+except ImportError:
     from services.hermes_extension import HermesExtensionServer, handler_from_environment
 
 _bridge_stop_event = threading.Event()
