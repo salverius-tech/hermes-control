@@ -70,6 +70,7 @@ class LocalHermesCommandExecutor:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=request.execution_folder,
         )
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []
@@ -153,6 +154,7 @@ class HermesPluginExecutor:
             source=request.source,
             requires_approval=request.requires_approval,
             session_id=request.session_id,
+            execution_folder=request.execution_folder,
             auth_token=self.auth_token,
         )
         writer.write(encode_message(bridge_request.to_message()))

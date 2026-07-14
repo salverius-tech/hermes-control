@@ -185,7 +185,11 @@ def create_app() -> FastAPI:
         return projection.list_task_events(task_id)
 
     @app.get("/projects", dependencies=[Depends(require_auth)])
-    def list_projects() -> list[ProjectSummary]:
+    def list_projects(include_archived: bool = False) -> list[ProjectSummary]:
+        if include_archived and workspace.available:
+            archived = workspace.list_projects(include_archived=True)
+            active = {project.project_id: project for project in projection.list_projects()}
+            return [active.get(project.project_id, project) for project in archived]
         return projection.list_projects()
 
     @app.get("/projects/{project_id}", dependencies=[Depends(require_auth)])

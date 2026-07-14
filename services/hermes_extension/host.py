@@ -45,6 +45,7 @@ class SubprocessHermesTaskHandler:
             stdin=asyncio.subprocess.PIPE if not query_mode else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=request.execution_folder,
         )
         assert process.stdout is not None
         assert process.stderr is not None
