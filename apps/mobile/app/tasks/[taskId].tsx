@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
@@ -23,6 +23,8 @@ export default function TaskDetailScreen() {
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
+  const [guidance, setGuidance] = useState('');
+  const [editingRetry, setEditingRetry] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -79,21 +81,40 @@ export default function TaskDetailScreen() {
     }
   }
 
-  async function retryTask() {
-    if (!taskId) return;
+  async function submitContinuation(newSession: boolean) {
+    if (!taskId || !guidance.trim()) return;
     try {
       setActionPending(true);
-      setError(null);
-      const retried = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/retry`, { method: 'POST' });
-      router.replace(`/tasks/${retried.task_id}`);
+      const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/continue`, {
+        method: 'POST',
+        body: JSON.stringify({ prompt: guidance.trim(), new_session: newSession }),
+      });
+      router.replace(`/tasks/${next.task_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry task');
+      setError(err instanceof Error ? err.message : 'Failed to continue task');
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function submitEditedRetry() {
+    if (!taskId || !guidance.trim()) return;
+    try {
+      setActionPending(true);
+      const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/continue`, {
+        method: 'POST',
+        body: JSON.stringify({ prompt: guidance.trim(), new_session: true }),
+      });
+      router.replace(`/tasks/${next.task_id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit edited retry');
     } finally {
       setActionPending(false);
     }
   }
 
   const canApprove = task?.status === 'awaiting_approval';
+  const canRecover = task?.status === 'failed' || task?.status === 'blocked' || task?.status === 'completed';
   const canCancel = task?.status === 'queued' || task?.status === 'running' || task?.status === 'awaiting_approval';
 
   return (
@@ -142,17 +163,37 @@ export default function TaskDetailScreen() {
                   <Text style={styles.buttonText}>Cancel</Text>
                 </Pressable>
               ) : null}
-              <Pressable
-                accessibilityRole="button"
-                disabled={actionPending}
-                onPress={retryTask}
-                style={[styles.button, actionPending && styles.disabledButton]}
-                testID="task-retry"
-              >
-                <Text style={styles.buttonText}>Retry</Text>
-              </Pressable>
+              {canRecover ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={actionPending}
+                    onPress={() => { setEditingRetry(true); setGuidance(task.prompt); }}
+                    style={[styles.button, actionPending && styles.disabledButton]}
+                    testID="task-edit-retry"
+                  >
+                    <Text style={styles.buttonText}>Edit and retry</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={actionPending}
+                    onPress={() => { setGuidance(''); void submitContinuation(false); }}
+                    style={[styles.button, actionPending && styles.disabledButton]}
+                    testID="task-continue"
+                  >
+                    <Text style={styles.buttonText}>Continue session</Text>
+                  </Pressable>
+                </>
+              ) : null}
             </View>
           </MetricCard>
+
+          {editingRetry ? (
+            <MetricCard title="Edit before retry" subtitle="The original task remains unchanged; this creates a linked task.">
+              <TextInput multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
+              <Pressable disabled={actionPending || !guidance.trim()} onPress={submitEditedRetry} style={[styles.button, (!guidance.trim() || actionPending) && styles.disabledButton]} testID="task-submit-edited-retry"><Text style={styles.buttonText}>Submit edited retry</Text></Pressable>
+            </MetricCard>
+          ) : null}
 
           {task.result_summary ? (
             <MetricCard title="Result">
@@ -229,6 +270,16 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  guidanceInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    color: colors.text,
+    minHeight: 120,
+    padding: spacing.md,
+    textAlignVertical: 'top',
   },
   error: {
     color: colors.danger,

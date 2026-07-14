@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 import shlex
 import uuid
 from dataclasses import dataclass, field
@@ -18,6 +19,7 @@ from .projection import TaskProjection
 class HermesExecutionResult:
     result_summary: str
     log_messages: list[str] = field(default_factory=list)
+    session_id: str | None = None
 
 
 TaskLogCallback = Callable[[str], Awaitable[None]]
@@ -116,7 +118,7 @@ class LocalHermesCommandExecutor:
             raise RuntimeError(detail)
 
         logs = [] if on_log is not None else stderr_lines
-        return HermesExecutionResult(result_summary=stdout_text or "Hermes command completed", log_messages=logs)
+        return HermesExecutionResult(result_summary=stdout_text or "Hermes command completed", log_messages=logs, session_id=_session_id_from_output(stdout_text))
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,7 @@ class HermesPluginExecutor:
             priority=request.priority,
             source=request.source,
             requires_approval=request.requires_approval,
+            session_id=request.session_id,
             auth_token=self.auth_token,
         )
         writer.write(encode_message(bridge_request.to_message()))
@@ -176,12 +179,18 @@ class HermesPluginExecutor:
                     return HermesExecutionResult(
                         result_summary=event.result_summary or "Hermes plugin task completed",
                         log_messages=[] if on_log is not None else logs,
+                        session_id=_session_id_from_output(event.result_summary or ""),
                     )
                 if event.event_type == "failed":
                     raise RuntimeError(event.error or event.message or "Hermes plugin task failed")
         finally:
             writer.close()
             await writer.wait_closed()
+
+
+def _session_id_from_output(output: str) -> str | None:
+    match = re.search(r"^Session:\s*(\S+)", output, flags=re.MULTILINE)
+    return match.group(1) if match else None
 
 
 def executor_from_environment() -> HermesExecutor:
@@ -321,6 +330,7 @@ class HermesTaskService:
             task_id,
             status=TaskStatus.COMPLETED,
             result_summary=result.result_summary,
+            session_id=result.session_id,
             event_type="task.completed",
         )
         await self.notify_task(completed, event_type="task.completed")

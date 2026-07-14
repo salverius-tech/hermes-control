@@ -15,6 +15,7 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
     CANCELED = "canceled"
     REJECTED = "rejected"
+    BLOCKED = "blocked"
 
 
 class TaskCreateRequest(BaseModel):
@@ -23,6 +24,11 @@ class TaskCreateRequest(BaseModel):
     priority: Literal["low", "normal", "high"] = "normal"
     source: str = "mobile"
     requires_approval: bool = False
+    parent_task_id: str | None = None
+    root_task_id: str | None = None
+    session_id: str | None = None
+    relation: Literal["original", "retry", "edited_retry", "continuation", "follow_up"] = "original"
+    execution_folder: str | None = None
 
     @field_validator("prompt")
     @classmethod
@@ -57,6 +63,11 @@ class TaskSummary(BaseModel):
     progress_log: list[str] = Field(default_factory=list)
     result_summary: str | None = None
     error: str | None = None
+    parent_task_id: str | None = None
+    root_task_id: str | None = None
+    session_id: str | None = None
+    relation: str = "original"
+    execution_folder: str | None = None
 
 
 class TaskEvent(BaseModel):
@@ -84,3 +95,52 @@ class ProjectSummary(BaseModel):
     running_count: int = 0
     completed_count: int = 0
     failed_count: int = 0
+    description: str | None = None
+    primary_folder: str | None = None
+    folders: list[str] = Field(default_factory=list)
+    archived: bool = False
+
+
+class SessionSummary(BaseModel):
+    session_id: str
+    title: str | None = None
+    preview: str | None = None
+    source: str | None = None
+    last_active_at: datetime | None = None
+    cwd: str | None = None
+    project_id: str | None = None
+    parent_session_id: str | None = None
+    archived: bool = False
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str = Field(min_length=1)
+    slug: str | None = None
+    description: str | None = None
+    folders: list[str] = Field(default_factory=list)
+    primary_folder: str | None = None
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    archived: bool | None = None
+    primary_folder: str | None = None
+
+
+class FolderRequest(BaseModel):
+    path: str = Field(min_length=1)
+
+
+class GuidanceRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    requires_approval: bool = False
+    new_session: bool = False
+
+    @field_validator("prompt")
+    @classmethod
+    def guidance_must_not_be_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("prompt must not be blank")
+        return stripped

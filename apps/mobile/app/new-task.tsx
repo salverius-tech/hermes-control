@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ import { colors, spacing } from '@/theme/tokens';
 
 export default function NewTaskScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
+  const { projectId: projectParam } = useLocalSearchParams<{ projectId?: string }>();
   const insets = useSafeAreaInsets();
   const [prompt, setPrompt] = useState('');
   const [projectId, setProjectId] = useState('default');
@@ -26,6 +28,10 @@ export default function NewTaskScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const skipNextDraftSave = useRef(false);
+
+  useEffect(() => {
+    if (typeof projectParam === 'string' && projectParam.trim()) setProjectId(projectParam);
+  }, [projectParam]);
 
   useEffect(() => {
     let mounted = true;

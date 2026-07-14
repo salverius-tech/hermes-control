@@ -35,6 +35,8 @@ export default function RootLayout() {
         <Stack.Screen name="tasks/index" options={{ title: 'Tasks' }} />
         <Stack.Screen name="tasks/[taskId]" options={{ title: 'Task Detail' }} />
         <Stack.Screen name="projects/index" options={{ title: 'Projects' }} />
+        <Stack.Screen name="projects/manage" options={{ title: 'Manage Project' }} />
+        <Stack.Screen name="projects/[projectId]" options={{ title: 'Project' }} />
         <Stack.Screen name="new-task" options={{ title: 'New Task' }} />
         <Stack.Screen name="settings" options={{ headerBackVisible: false, title: 'Settings' }} />
       </Stack>

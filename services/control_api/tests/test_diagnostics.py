@@ -17,11 +17,14 @@ def test_diagnostics_reports_backend_storage_and_execution_mode(monkeypatch, tmp
     response = client.get("/diagnostics", headers={"Authorization": "Bearer dev-token"})
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    assert body == {
         "version": "0.1.0",
         "storage": "sqlite",
         "schema_version": "1",
         "execution_mode": "command",
         "notification_mode": "discord",
         "websocket_path": "/ws/events",
+        "hermes_home": "/home/anvil/.hermes",
+        "hermes_home_available": "true",
     }

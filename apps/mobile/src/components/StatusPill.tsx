@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/theme/tokens';
 
-export type StatusKind = 'awaiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'rejected' | 'idle' | 'offline';
+export type StatusKind = 'awaiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'rejected' | 'blocked' | 'idle' | 'offline';
 
 const statusColor: Record<StatusKind, string> = {
   awaiting_approval: colors.warning,
@@ -12,6 +12,7 @@ const statusColor: Record<StatusKind, string> = {
   failed: colors.danger,
   canceled: colors.muted,
   rejected: colors.danger,
+  blocked: colors.warning,
   idle: colors.success,
   offline: colors.muted,
 };

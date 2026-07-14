@@ -6,13 +6,15 @@ from uuid import uuid4
 
 from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskStatus, TaskSummary
 from .storage import TaskStore
+from .workspace import HermesWorkspaceStore
 
 
 class TaskProjection:
     """Task read model and event projection for the mobile control API."""
 
-    def __init__(self, store: TaskStore | None = None) -> None:
+    def __init__(self, store: TaskStore | None = None, workspace: HermesWorkspaceStore | None = None) -> None:
         self._store = store
+        self.workspace = workspace
         self._tasks: dict[str, TaskSummary] = {task.task_id: task for task in store.load_tasks()} if store else {}
         self._events: dict[str, list[TaskEvent]] = defaultdict(list)
         if store:
@@ -33,6 +35,11 @@ class TaskProjection:
             source=request.source,
             priority=request.priority,
             requires_approval=request.requires_approval,
+            execution_folder=request.execution_folder,
+            parent_task_id=request.parent_task_id,
+            root_task_id=request.root_task_id,
+            session_id=request.session_id,
+            relation=request.relation,
             status=TaskStatus.AWAITING_APPROVAL if request.requires_approval else TaskStatus.QUEUED,
             created_at=now,
             updated_at=now,
@@ -90,6 +97,7 @@ class TaskProjection:
         progress_message: str | None = None,
         result_summary: str | None = None,
         error: str | None = None,
+        session_id: str | None = None,
         event_type: str = "task.updated",
     ) -> TaskSummary:
         task = self._tasks[task_id]
@@ -102,6 +110,8 @@ class TaskProjection:
             update_data["result_summary"] = result_summary
         if error is not None:
             update_data["error"] = error
+        if session_id is not None:
+            update_data["session_id"] = session_id
         update_data["updated_at"] = datetime.now(timezone.utc)
         updated = TaskSummary(**update_data)
         self._tasks[task_id] = updated
@@ -133,27 +143,27 @@ class TaskProjection:
             self._store.save_task(task)
 
     def list_projects(self) -> list[ProjectSummary]:
+        workspace_projects = self.workspace.list_projects() if self.workspace is not None else []
+        known = {project.project_id: project for project in workspace_projects}
         counts: dict[str, dict[TaskStatus, int]] = defaultdict(lambda: defaultdict(int))
         for task in self._tasks.values():
             counts[task.project_id][TaskStatus(task.status)] += 1
 
-        projects = []
-        for project_id, status_counts in sorted(counts.items()):
-            projects.append(
-                ProjectSummary(
-                    project_id=project_id,
-                    name=self._project_name(project_id),
-                    queued_count=status_counts[TaskStatus.QUEUED] + status_counts[TaskStatus.AWAITING_APPROVAL],
-                    running_count=status_counts[TaskStatus.RUNNING],
-                    completed_count=status_counts[TaskStatus.COMPLETED],
-                    failed_count=status_counts[TaskStatus.FAILED]
-                    + status_counts[TaskStatus.CANCELED]
-                    + status_counts[TaskStatus.REJECTED],
-                )
-            )
+        projects: list[ProjectSummary] = []
+        for project_id, status_counts in counts.items():
+            project = known.get(project_id, ProjectSummary(project_id=project_id, name=self._project_name(project_id)))
+            projects.append(project.model_copy(update={
+                "queued_count": status_counts[TaskStatus.QUEUED] + status_counts[TaskStatus.AWAITING_APPROVAL],
+                "running_count": status_counts[TaskStatus.RUNNING],
+                "completed_count": status_counts[TaskStatus.COMPLETED],
+                "failed_count": status_counts[TaskStatus.FAILED] + status_counts[TaskStatus.CANCELED] + status_counts[TaskStatus.REJECTED],
+            }))
+        for project in workspace_projects:
+            if project.project_id not in {item.project_id for item in projects}:
+                projects.append(project)
         if not projects:
             projects.append(ProjectSummary(project_id="default", name="Default"))
-        return projects
+        return sorted(projects, key=lambda project: project.name.lower())
 
     def list_agents(self) -> list[AgentStatus]:
         return sorted(self._agents.values(), key=lambda agent: agent.agent_id)

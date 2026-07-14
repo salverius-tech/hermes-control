@@ -1,6 +1,7 @@
 import { buildApiUrl } from './url';
 
-export type TaskStatus = 'awaiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'rejected';
+export type TaskStatus = 'awaiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'rejected' | 'blocked';
+export type TaskRelation = 'original' | 'retry' | 'edited_retry' | 'continuation' | 'follow_up';
 
 export type TaskSummary = {
   task_id: string;
@@ -16,6 +17,10 @@ export type TaskSummary = {
   progress_log: string[];
   result_summary?: string | null;
   error?: string | null;
+  parent_task_id?: string | null;
+  root_task_id?: string | null;
+  session_id?: string | null;
+  relation?: TaskRelation;
 };
 
 export type TaskEvent = {
@@ -29,10 +34,26 @@ export type TaskEvent = {
 export type ProjectSummary = {
   project_id: string;
   name: string;
+  description?: string | null;
+  primary_folder?: string | null;
+  folders: string[];
+  archived: boolean;
   queued_count: number;
   running_count: number;
   completed_count: number;
   failed_count: number;
+};
+
+export type SessionSummary = {
+  session_id: string;
+  title?: string | null;
+  preview?: string | null;
+  source?: string | null;
+  last_active_at?: string | null;
+  cwd?: string | null;
+  project_id?: string | null;
+  parent_session_id?: string | null;
+  archived: boolean;
 };
 
 export type AgentStatus = {
@@ -47,17 +68,14 @@ export type Diagnostics = {
   version: string;
   storage: 'memory' | 'sqlite';
   schema_version: string;
-  execution_mode: 'unconfigured' | 'command';
+  execution_mode: 'unconfigured' | 'command' | 'plugin';
   notification_mode: 'disabled' | 'discord';
   websocket_path: string;
+  hermes_home?: string;
+  hermes_home_available?: string;
 };
 
-export async function apiFetch<T>(
-  apiUrl: string,
-  apiToken: string,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(buildApiUrl(apiUrl, path), {
     ...init,
     headers: {

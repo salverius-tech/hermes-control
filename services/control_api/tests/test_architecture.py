@@ -29,7 +29,7 @@ def test_storage_adapter_depends_only_on_domain_contracts():
 
 
 def test_projection_stays_below_application_and_transport_layers():
-    assert _relative_imports("projection") <= {"models", "storage"}
+    assert _relative_imports("projection") <= {"models", "storage", "workspace"}
 
 
 def test_application_service_does_not_depend_on_fastapi_or_websocket_transport():

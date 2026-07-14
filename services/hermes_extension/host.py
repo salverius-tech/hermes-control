@@ -36,7 +36,10 @@ class SubprocessHermesTaskHandler:
 
     async def run(self, request: PluginRequest, *, emit: PluginEventSink) -> str:
         query_mode = any(argument in {"-q", "--query"} for argument in self.command)
-        command = (*self.command, request.prompt) if query_mode else self.command
+        base_command = self.command
+        if request.session_id and len(base_command) >= 2 and base_command[0] == "hermes" and base_command[1] == "chat":
+            base_command = ("hermes", "chat", "--resume", request.session_id, *base_command[2:])
+        command = (*base_command, request.prompt) if query_mode else base_command
         process = await asyncio.create_subprocess_exec(
             *command,
             stdin=asyncio.subprocess.PIPE if not query_mode else asyncio.subprocess.DEVNULL,
