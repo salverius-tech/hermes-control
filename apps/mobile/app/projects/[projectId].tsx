@@ -54,7 +54,7 @@ export default function ProjectDetailScreen() {
   const grouped = useMemo(() => {
     const groups = new Map<string, TaskSummary[]>();
     for (const task of tasks) {
-      const key = task.root_task_id || task.task_id;
+      const key = task.root_task_id || task.session_id || task.parent_task_id || task.task_id;
       groups.set(key, [...(groups.get(key) || []), task]);
     }
     return [...groups.values()].sort((a, b) => Date.parse(b[0].updated_at) - Date.parse(a[0].updated_at));
@@ -84,7 +84,7 @@ export default function ProjectDetailScreen() {
             {!active.length ? <Text style={styles.muted}>No active tasks.</Text> : null}
           </Section>
           <Section title="Work threads" count={grouped.length}>
-            {grouped.map((group) => <ThreadCard key={group[0].root_task_id || group[0].task_id} tasks={group} />)}
+            {grouped.map((group) => <ThreadCard key={group[0].root_task_id || group[0].session_id || group[0].task_id} tasks={group} />)}
             {!grouped.length ? <Text style={styles.muted}>No task history in this project.</Text> : null}
           </Section>
           <Section title="Hermes sessions" count={sessions.length}>
@@ -107,8 +107,9 @@ function TaskRow({ task }: { task: TaskSummary }) {
 }
 
 function ThreadCard({ tasks }: { tasks: TaskSummary[] }) {
+  const [expanded, setExpanded] = useState(tasks.some(taskNeedsAttention));
   const latest = tasks[0];
-  return <View style={styles.thread}><View style={styles.taskTop}><Text style={styles.taskTitle} numberOfLines={2}>{latest.title}</Text><StatusPill status={latest.status} /></View><Text style={styles.taskMeta}>{tasks.length} linked task{tasks.length === 1 ? '' : 's'} · {latest.result_summary || latest.error || 'No final result yet'}</Text>{tasks.slice(1).map((task) => <TaskRow key={task.task_id} task={task} />)}</View>;
+  return <View style={styles.thread}><Pressable accessibilityRole="button" onPress={() => setExpanded((value) => !value)}><View style={styles.taskTop}><Text style={styles.taskTitle} numberOfLines={2}>{latest.title}</Text><StatusPill status={latest.status} /></View><Text style={styles.taskMeta}>{tasks.length} immutable attempt{tasks.length === 1 ? '' : 's'} · {expanded ? 'Collapse' : 'Expand'}</Text><Text style={styles.taskMeta}>{latest.result_summary || latest.error || latest.blocker_message || 'No final result yet'}</Text></Pressable>{expanded ? tasks.slice().sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((task) => <TaskRow key={task.task_id} task={task} />) : null}</View>;
 }
 
 const styles = StyleSheet.create({

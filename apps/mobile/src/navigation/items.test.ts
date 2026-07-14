@@ -4,7 +4,7 @@ import { isActiveRoute, navigationItems } from './items';
 
 describe('navigationItems', () => {
   it('keeps primary screens reachable from the bottom bar', () => {
-    expect(navigationItems.map((item) => item.href)).toEqual(['/', '/tasks', '/new-task', '/projects']);
+    expect(navigationItems.map((item) => item.href)).toEqual(['/', '/attention', '/new-task', '/projects']);
   });
 
   it('replaces navigation history when returning home from the bottom bar', () => {
@@ -16,21 +16,21 @@ describe('navigationItems', () => {
   });
 
   it('uses named vector icons instead of font glyphs', () => {
-    expect(navigationItems.map((item) => item.iconName)).toEqual(['home', 'list', 'plus-circle', 'folder']);
+    expect(navigationItems.map((item) => item.iconName)).toEqual(['home', 'bell', 'plus-circle', 'folder']);
   });
 });
 
 describe('isActiveRoute', () => {
   it('marks the dashboard active only at the root route', () => {
     expect(isActiveRoute('/', '/')).toBe(true);
-    expect(isActiveRoute('/tasks', '/')).toBe(false);
+    expect(isActiveRoute('/attention', '/')).toBe(false);
   });
 
   it('marks nested screens active under their parent route', () => {
-    expect(isActiveRoute('/tasks/task-123', '/tasks')).toBe(true);
+    expect(isActiveRoute('/attention/task-123', '/attention')).toBe(true);
   });
 
   it('does not mark sibling routes as active', () => {
-    expect(isActiveRoute('/projects', '/tasks')).toBe(false);
+    expect(isActiveRoute('/projects', '/attention')).toBe(false);
   });
 });

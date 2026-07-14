@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, spacing } from '@/theme/tokens';
+import { useDataStore } from '@/state/data-store';
 
 import { bottomNavigationHeight } from './constants';
 import { isActiveRoute, navigationItems } from './items';
@@ -11,6 +12,7 @@ import { isActiveRoute, navigationItems } from './items';
 export function BottomNavigation() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const unreadAttention = useDataStore((state) => state.unreadAttention);
 
   return (
     <View style={[styles.shell, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}> 
@@ -27,6 +29,7 @@ export function BottomNavigation() {
                   <View style={styles.stack}>
                     <Feather color={active ? colors.text : colors.muted} name={item.iconName} size={28} style={styles.icon} />
                     <Text style={[styles.label, active && styles.activeText]}>{item.label}</Text>
+                    {item.label === 'Attention' && unreadAttention > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{unreadAttention > 9 ? '9+' : unreadAttention}</Text></View> : null}
                   </View>
                 </Pressable>
               </Link>
@@ -39,6 +42,8 @@ export function BottomNavigation() {
 }
 
 const styles = StyleSheet.create({
+  badge: { alignItems: 'center', backgroundColor: colors.danger, borderRadius: 999, minWidth: 18, paddingHorizontal: 4, position: 'absolute', right: 4, top: 0 },
+  badgeText: { color: colors.text, fontSize: 10, fontWeight: '900' },
   activeItem: {
     backgroundColor: colors.primarySoft,
     borderColor: colors.primary,

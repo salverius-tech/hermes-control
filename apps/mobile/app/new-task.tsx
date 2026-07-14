@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,10 +12,14 @@ import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/fe
 import { applyPromptTemplate, promptTemplates } from '@/features/tasks/templates';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useSettingsStore } from '@/state/settings';
+import { useDataStore } from '@/state/data-store';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function NewTaskScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
+  const projects = useDataStore((state) => state.projects);
+  const refreshData = useDataStore((state) => state.refresh);
+  const router = useRouter();
   const { projectId: projectParam } = useLocalSearchParams<{ projectId?: string }>();
   const insets = useSafeAreaInsets();
   const [prompt, setPrompt] = useState('');
@@ -28,6 +32,9 @@ export default function NewTaskScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const skipNextDraftSave = useRef(false);
+
+  useEffect(() => { if (apiToken) void refreshData(); }, [apiToken, refreshData]);
+  useEffect(() => { if (projectId === 'default') void AsyncStorage.getItem('hmc.lastProject').then((value) => { if (value) setProjectId(value); }); }, [projectId]);
 
   useEffect(() => {
     if (typeof projectParam === 'string' && projectParam.trim()) setProjectId(projectParam);
@@ -119,12 +126,13 @@ export default function NewTaskScreen() {
         method: 'POST',
         body: JSON.stringify(request),
       });
+      await AsyncStorage.setItem('hmc.lastProject', request.project_id);
       await clearTaskDraft(AsyncStorage);
       skipNextDraftSave.current = true;
       setPrompt('');
       setProjectId(request.project_id);
       setRequiresApproval(false);
-      Alert.alert(task.requires_approval ? 'Approval requested' : 'Task queued', task.title);
+      router.replace(`/tasks/${task.task_id}`);
     } catch (err) {
       Alert.alert('Task failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -176,16 +184,10 @@ export default function NewTaskScreen() {
 
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Project</Text>
-        <TextInput
-          autoCapitalize="none"
-          onChangeText={setProjectId}
-          placeholder="default"
-          placeholderTextColor={colors.muted}
-          style={styles.singleLineInput}
-          testID="new-task-project-id"
-          value={projectId}
-        />
-        <Text style={styles.help}>Use an existing project id or type a new one to group related tasks.</Text>
+        <Text style={styles.selectedProject}>{projects.find((project) => project.project_id === projectId)?.name || projectId}</Text>
+        <Text style={styles.help}>{projects.find((project) => project.project_id === projectId)?.primary_folder || 'Select an active Hermes project.'}</Text>
+        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
+        {projects.length > 0 && projects.every((project) => project.archived) ? <Text style={styles.error}>All projects are archived. Restore one before creating work.</Text> : null}
       </View>
 
       <View style={styles.fieldGroup}>
@@ -225,11 +227,11 @@ export default function NewTaskScreen() {
       {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
 
       <Pressable
-        disabled={!prompt.trim() || submitting || !apiToken}
+        disabled={!prompt.trim() || submitting || !apiToken || !projects.some((project) => project.project_id === projectId && !project.archived)}
         onPress={submit}
         style={({ pressed }) => [
           styles.button,
-          (!prompt.trim() || submitting || !apiToken) && styles.buttonDisabled,
+          (!prompt.trim() || submitting || !apiToken || !projects.some((project) => project.project_id === projectId && !project.archived)) && styles.buttonDisabled,
           pressed && styles.buttonPressed,
         ]}
       >
@@ -368,6 +370,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
+  projectChip: { borderColor: colors.border, borderRadius: 999, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  projectChipSelected: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  projectRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  selectedProject: { color: colors.text, fontSize: 17, fontWeight: '800' },
   templateChip: {
     backgroundColor: colors.surface,
     borderColor: colors.border,

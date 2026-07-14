@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Link } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
@@ -29,6 +29,7 @@ export default function TasksScreen() {
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
 
   async function loadTasks(showSpinner = false) {
     try {
@@ -69,15 +70,17 @@ export default function TasksScreen() {
   }, [apiToken, apiUrl]);
 
   const visibleTasks = useMemo(() => tasks.filter((task) => {
+    if (query.trim() && !`${task.title} ${task.prompt} ${task.project_id}`.toLowerCase().includes(query.trim().toLowerCase())) return false;
     if (filter === 'all') return true;
     if (filter === 'attention') return task.status === 'awaiting_approval' || task.status === 'failed' || task.status === 'blocked';
     return task.status === filter;
-  }), [filter, tasks]);
+  }).sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)), [filter, query, tasks]);
 
   return (
     <ScrollView refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={() => void loadTasks(true)} refreshing={refreshing} />} contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
       <Text style={styles.heading}>Work inbox</Text>
       <Text style={styles.muted}>Tasks refresh automatically while this screen is open.</Text>
+      <TextInput accessibilityLabel="Search tasks" onChangeText={setQuery} placeholder="Search tasks, prompts, or projects" placeholderTextColor={colors.muted} style={styles.search} value={query} />
       <ScrollView contentContainerStyle={styles.filters} horizontal showsHorizontalScrollIndicator={false}>
         {filters.map((item) => <Pressable key={item.value} onPress={() => setFilter(item.value)} style={[styles.filter, filter === item.value && styles.filterSelected]}><Text style={[styles.filterText, filter === item.value && styles.filterTextSelected]}>{item.label}</Text></Pressable>)}
       </ScrollView>
@@ -114,5 +117,6 @@ const styles = StyleSheet.create({
   muted: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   pressed: { opacity: 0.75 },
   prompt: { color: colors.muted, fontSize: 15, lineHeight: 21 },
+  search: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, color: colors.text, padding: spacing.md },
   title: { color: colors.text, flex: 1, fontSize: 17, fontWeight: '800' },
 });

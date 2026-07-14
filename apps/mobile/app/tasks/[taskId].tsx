@@ -88,7 +88,7 @@ export default function TaskDetailScreen() {
       setActionPending(true);
       const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}/continue`, {
         method: 'POST',
-        body: JSON.stringify({ prompt: guidance.trim(), new_session: newSession }),
+        body: JSON.stringify({ prompt: guidance.trim(), requires_approval: false, new_session: newSession, relation: 'continuation' }),
       });
       router.replace(`/tasks/${next.task_id}`);
     } catch (err) {
@@ -112,6 +112,16 @@ export default function TaskDetailScreen() {
     } finally {
       setActionPending(false);
     }
+  }
+
+  async function retryUnchanged() {
+    if (!task) return;
+    try {
+      setActionPending(true); setError(null);
+      const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${task.task_id}/continue`, { method: 'POST', body: JSON.stringify({ prompt: task.prompt, requires_approval: false, new_session: true, relation: 'retry' }) });
+      router.replace(`/tasks/${next.task_id}`);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to retry task'); }
+    finally { setActionPending(false); }
   }
 
   const canApprove = task?.status === 'awaiting_approval';
@@ -166,6 +176,7 @@ export default function TaskDetailScreen() {
               ) : null}
               {canRecover ? (
                 <>
+                  <Pressable accessibilityRole="button" disabled={actionPending} onPress={() => void retryUnchanged()} style={[styles.button, actionPending && styles.disabledButton]} testID="task-retry"><Text style={styles.buttonText}>Retry unchanged</Text></Pressable>
                   <Pressable
                     accessibilityRole="button"
                     disabled={actionPending}

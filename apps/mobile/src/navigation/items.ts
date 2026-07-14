@@ -1,7 +1,7 @@
 export type NavigationItem = {
   href: '/' | '/attention' | '/new-task' | '/projects';
   label: string;
-  iconName: 'home' | 'bell' | 'plus-circle' | 'folder';
+  iconName: 'home' | 'list' | 'bell' | 'plus-circle' | 'folder';
   replace?: boolean;
 };
 

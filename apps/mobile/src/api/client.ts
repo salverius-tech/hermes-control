@@ -24,6 +24,7 @@ export type TaskSummary = {
   root_task_id?: string | null;
   session_id?: string | null;
   relation?: TaskRelation;
+  execution_folder?: string | null;
 };
 
 export type TaskEvent = {
@@ -75,7 +76,7 @@ export type Diagnostics = {
   notification_mode: 'disabled' | 'discord';
   websocket_path: string;
   hermes_home?: string;
-  hermes_home_available?: string;
+  hermes_home_available?: boolean | string;
 };
 
 export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -84,7 +85,7 @@ export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiToken}`,
+      ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
       ...(init.headers || {}),
     },
   });
