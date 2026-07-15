@@ -42,6 +42,7 @@ def create_app() -> FastAPI:
         notifier=notifier_from_environment(),
         max_concurrent_tasks=int(os.getenv("CONTROL_API_MAX_CONCURRENT_TASKS", "4")),
     )
+    task_service.reconcile_after_restart()
     task_rate_limiter = RateLimiter(int(os.getenv("CONTROL_API_RATE_LIMIT_PER_MINUTE", "60")))
     connections = ConnectionManager()
 

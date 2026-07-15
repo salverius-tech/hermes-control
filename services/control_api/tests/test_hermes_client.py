@@ -19,6 +19,22 @@ from services.hermes_extension import decode_message, encode_message
 pytestmark = pytest.mark.unit
 
 
+def test_task_service_reconciles_orphaned_running_tasks():
+    projection = TaskProjection()
+    task = projection.create_task(TaskCreateRequest(prompt="orphaned"))
+    projection.update_task(task.task_id, status=TaskStatus.RUNNING)
+    service = HermesTaskService(projection=projection)
+
+    interrupted = service.reconcile_after_restart()
+
+    assert [item.task_id for item in interrupted] == [task.task_id]
+    current = projection.get_task(task.task_id)
+    assert current is not None
+    assert current.status == TaskStatus.BLOCKED
+    assert current.blocker_category == "recovery"
+    assert current.blocker_retryable is True
+
+
 class BlockingHermesExecutor:
     def __init__(self) -> None:
         self.started = asyncio.Event()

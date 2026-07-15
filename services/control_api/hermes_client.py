@@ -261,6 +261,22 @@ class HermesTaskService:
             return await self._execute_with_slot(task.task_id, request, on_update=on_update)
         return task
 
+    def reconcile_after_restart(self) -> list[TaskSummary]:
+        interrupted: list[TaskSummary] = []
+        for task in self.projection.list_tasks():
+            if TaskStatus(task.status) not in {TaskStatus.QUEUED, TaskStatus.RUNNING}:
+                continue
+            interrupted.append(self.projection.update_task(
+                task.task_id,
+                status=TaskStatus.BLOCKED,
+                error="Task was interrupted when the Control API restarted",
+                blocker_category="recovery",
+                blocker_message="Task was interrupted when the Control API restarted",
+                blocker_retryable=True,
+                event_type="task.interrupted",
+            ))
+        return interrupted
+
     def start_task(
         self,
         task: TaskSummary,
