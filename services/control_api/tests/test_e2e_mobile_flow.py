@@ -46,6 +46,10 @@ def test_mobile_user_can_connect_create_task_and_see_live_update(monkeypatch):
     assert projects.status_code == 200
     assert projects.json()[0]["project_id"] == "mobile-control"
 
+    project_detail = client.get("/projects/mobile-control", headers={"Authorization": "Bearer dev-token"})
+    assert project_detail.status_code == 200
+    assert project_detail.json()["project_id"] == "mobile-control"
+
     agents = client.get("/agents", headers={"Authorization": "Bearer dev-token"})
     assert agents.status_code == 200
     assert agents.json()[0]["agent_id"] == "hermes-agent"

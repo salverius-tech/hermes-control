@@ -172,6 +172,9 @@ class TaskProjection:
             projects.append(ProjectSummary(project_id="default", name="Default"))
         return sorted(projects, key=lambda project: project.name.lower())
 
+    def get_project(self, project_id: str) -> ProjectSummary | None:
+        return next((project for project in self.list_projects() if project.project_id == project_id), None)
+
     def list_agents(self) -> list[AgentStatus]:
         return sorted(self._agents.values(), key=lambda agent: agent.agent_id)
 

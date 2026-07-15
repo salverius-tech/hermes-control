@@ -203,7 +203,7 @@ def create_app() -> FastAPI:
 
     @app.get("/projects/{project_id}", dependencies=[Depends(require_auth)])
     def get_project(project_id: str) -> ProjectSummary:
-        project = workspace.get_project(project_id)
+        project = projection.get_project(project_id)
         if project is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
         return project
