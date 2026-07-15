@@ -5,6 +5,7 @@ import pytest
 from services.hermes_extension.host import (
     NativeHermesTaskHandler,
     SubprocessHermesTaskHandler,
+    build_command,
     handler_from_environment,
 )
 from services.hermes_extension.protocol import PluginRequest
@@ -64,6 +65,35 @@ async def test_subprocess_handler_appends_prompt_for_query_mode():
     )
 
     assert result == "query:inspect this"
+
+
+def test_build_command_places_resume_before_query_and_preserves_prompt():
+    command, query_mode = build_command(
+        ("hermes", "chat", "--ignore-user-config", "--ignore-rules", "-q"),
+        PluginRequest("req-resume", "inspect punctuation: ;()", "default", "normal", "mobile", False, session_id="session-123"),
+    )
+
+    assert query_mode is True
+    assert command == (
+        "hermes",
+        "chat",
+        "--resume",
+        "session-123",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "-q",
+        "inspect punctuation: ;()",
+    )
+
+
+def test_build_command_uses_stdin_for_non_query_commands():
+    command, query_mode = build_command(
+        ("hermes", "chat"),
+        PluginRequest("req-stdin", "inspect", "default", "normal", "mobile", False, session_id="session-456"),
+    )
+
+    assert query_mode is False
+    assert command == ("hermes", "chat", "--resume", "session-456")
 
 
 @pytest.mark.anyio

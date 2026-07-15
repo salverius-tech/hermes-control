@@ -13,6 +13,14 @@ from .server import PluginEventSink
 NativeTaskRunner = Callable[[PluginRequest, PluginEventSink], Awaitable[str]]
 
 
+def build_command(command: tuple[str, ...], request: PluginRequest) -> tuple[tuple[str, ...], bool]:
+    query_mode = any(argument in {"-q", "--query"} for argument in command)
+    base_command = command
+    if request.session_id and len(base_command) >= 2 and base_command[0] == "hermes" and base_command[1] == "chat":
+        base_command = ("hermes", "chat", "--resume", request.session_id, *base_command[2:])
+    return ((*base_command, request.prompt) if query_mode else base_command, query_mode)
+
+
 @dataclass
 class NativeHermesTaskHandler:
     """Adapter for a future Hermes-native task runner callback.
@@ -35,11 +43,7 @@ class SubprocessHermesTaskHandler:
     timeout_seconds: float = 900
 
     async def run(self, request: PluginRequest, *, emit: PluginEventSink) -> str:
-        query_mode = any(argument in {"-q", "--query"} for argument in self.command)
-        base_command = self.command
-        if request.session_id and len(base_command) >= 2 and base_command[0] == "hermes" and base_command[1] == "chat":
-            base_command = ("hermes", "chat", "--resume", request.session_id, *base_command[2:])
-        command = (*base_command, request.prompt) if query_mode else base_command
+        command, query_mode = build_command(self.command, request)
         process = await asyncio.create_subprocess_exec(
             *command,
             stdin=asyncio.subprocess.PIPE if not query_mode else asyncio.subprocess.DEVNULL,
