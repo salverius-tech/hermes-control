@@ -24,21 +24,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: spacing.lg,
+    backgroundColor: colors.elevated,
+    borderRadius: 18,
+    padding: spacing.md,
   },
   subtitle: {
     color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     marginTop: spacing.xs,
   },
   title: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
   },
 });

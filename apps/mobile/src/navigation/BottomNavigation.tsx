@@ -13,6 +13,9 @@ export function BottomNavigation() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const unreadAttention = useDataStore((state) => state.unreadAttention);
+  const showNavigation = pathname === '/' || pathname === '/attention' || pathname === '/new-task' || pathname === '/projects';
+
+  if (!showNavigation) return null;
 
   return (
     <View style={[styles.shell, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}> 

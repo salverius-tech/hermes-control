@@ -6,7 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
 import { apiFetch, TaskEvent, TaskSummary } from '@/api/client';
+import { ExpandableDetails } from '@/components/ExpandableDetails';
 import { MetricCard } from '@/components/MetricCard';
+import { MetadataRow } from '@/components/MetadataRow';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { StatusPill } from '@/components/StatusPill';
 import { useSettingsStore } from '@/state/settings';
@@ -135,7 +137,7 @@ export default function TaskDetailScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {task ? (
         <>
-          <MetricCard title={task.title} subtitle={task.prompt}>
+          <MetricCard title={task.title}>
             <View style={styles.statusRow}>
               <StatusPill status={task.status} />
               <Text style={styles.project}>{task.project_id}</Text>
@@ -200,6 +202,13 @@ export default function TaskDetailScreen() {
             </View>
           </MetricCard>
 
+          <ExpandableDetails label="Task context">
+            <Text style={styles.bodyText}>{task.prompt}</Text>
+            <MetadataRow label="Relation" value={task.relation || 'original'} />
+            <MetadataRow label="Execution folder" value={task.execution_folder} />
+            <MetadataRow label="Session" value={task.session_id} />
+          </ExpandableDetails>
+
           {editingRetry ? (
             <MetricCard title={continuationMode ? 'Continue Hermes session' : 'Edit before retry'} subtitle="The original task remains unchanged; this creates a linked task.">
               <TextInput multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
@@ -213,41 +222,17 @@ export default function TaskDetailScreen() {
             </MetricCard>
           ) : null}
 
-          {task.blocker_message ? (
-            <MetricCard title="Hermes needs attention" subtitle={task.blocker_category || 'blocked'}>
-              <Text style={styles.error}>{task.blocker_message}</Text>
-              <Text style={styles.muted}>{task.blocker_retryable ? 'Check the environment, then continue or retry.' : 'Review the task before deciding what to do next.'}</Text>
-            </MetricCard>
-          ) : null}
+          {task.blocker_message ? <MetricCard title="Hermes needs attention" subtitle={task.blocker_category || 'blocked'}><Text numberOfLines={3} style={styles.error}>{task.blocker_message}</Text><Text style={styles.muted}>{task.blocker_retryable ? 'Check the environment, then continue or retry.' : 'Review the task before deciding what to do next.'}</Text></MetricCard> : null}
 
-          {task.error ? (
-            <MetricCard title="Error">
-              <Text style={styles.error}>{task.error}</Text>
-            </MetricCard>
-          ) : null}
+          {task.error ? <ExpandableDetails label="Technical error"><Text style={styles.error}>{task.error}</Text></ExpandableDetails> : null}
 
-          <MetricCard title="Progress log">
-            {task.progress_log.length === 0 ? (
-              <Text style={styles.muted}>No progress messages yet.</Text>
-            ) : (
-              task.progress_log.map((line, index) => (
-                <Text key={`${line}-${index}`} style={styles.logLine}>{line}</Text>
-              ))
-            )}
-          </MetricCard>
+          <ExpandableDetails initiallyExpanded={task.status === 'running'} label={`Progress log · ${task.progress_log.length}`}>
+            {task.progress_log.length === 0 ? <Text style={styles.muted}>No progress messages yet.</Text> : task.progress_log.map((line, index) => <Text key={`${line}-${index}`} style={styles.logLine}>{line}</Text>)}
+          </ExpandableDetails>
 
-          <MetricCard title="Event timeline">
-            {events.length === 0 ? (
-              <Text style={styles.muted}>No events recorded yet.</Text>
-            ) : (
-              events.map((event, index) => (
-                <View key={`${event.event_type}-${event.created_at}-${index}`} style={styles.eventRow}>
-                  <Text style={styles.eventType}>{event.event_type}</Text>
-                  {event.message ? <Text style={styles.eventMessage}>{event.message}</Text> : null}
-                </View>
-              ))
-            )}
-          </MetricCard>
+          <ExpandableDetails label={`Event timeline · ${events.length}`}>
+            {events.length === 0 ? <Text style={styles.muted}>No events recorded yet.</Text> : events.map((event, index) => <View key={`${event.event_type}-${event.created_at}-${index}`} style={styles.eventRow}><Text style={styles.eventType}>{event.event_type}</Text>{event.message ? <Text style={styles.eventMessage}>{event.message}</Text> : null}</View>)}
+          </ExpandableDetails>
         </>
       ) : null}
     </ScrollView>

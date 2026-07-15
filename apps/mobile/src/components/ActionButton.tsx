@@ -22,8 +22,12 @@ export function ActionButton({ disabled, label, style, variant = 'secondary', ..
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 18,
-    padding: spacing.lg,
+    alignItems: 'center',
+    borderRadius: 14,
+    minHeight: 52,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   disabled: {
     opacity: 0.45,

@@ -10,6 +10,7 @@ import { clearTaskDraft, loadTaskDraft, saveTaskDraft } from '@/features/tasks/d
 import { appendTranscript } from '@/features/tasks/prompt';
 import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/features/tasks/request';
 import { applyPromptTemplate, promptTemplates } from '@/features/tasks/templates';
+import { ExpandableDetails } from '@/components/ExpandableDetails';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useSettingsStore } from '@/state/settings';
 import { useDataStore } from '@/state/data-store';
@@ -182,6 +183,7 @@ export default function NewTaskScreen() {
         </View>
       </View>
 
+      <ExpandableDetails initiallyExpanded label="Task options">
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Project</Text>
         <Text style={styles.selectedProject}>{projects.find((project) => project.project_id === projectId)?.name || projectId}</Text>
@@ -221,6 +223,7 @@ export default function NewTaskScreen() {
           value={requiresApproval}
         />
       </View>
+      </ExpandableDetails>
 
       {listening ? <Text style={styles.listening}>Listening… speak your Hermes instruction now.</Text> : null}
       {partialTranscript ? <Text style={styles.partial}>Heard: {partialTranscript}</Text> : null}
