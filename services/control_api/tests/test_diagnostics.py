@@ -28,4 +28,7 @@ def test_diagnostics_reports_backend_storage_and_execution_mode(monkeypatch, tmp
         "websocket_path": "/ws/events",
         "hermes_home": str(HermesWorkspaceStore().hermes_home),
         "hermes_home_available": str(HermesWorkspaceStore().available).lower(),
+        "bridge_configured": "false",
+        "bridge_socket_available": "false",
+        "active_task_count": "0",
     }

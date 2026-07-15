@@ -239,6 +239,10 @@ class HermesTaskService:
     _running_tasks: dict[str, asyncio.Task[TaskSummary]] = field(default_factory=dict, init=False)
     _execution_slots: asyncio.Semaphore = field(init=False)
 
+    @property
+    def active_task_count(self) -> int:
+        return len(self._running_tasks)
+
     def __post_init__(self) -> None:
         if self.max_concurrent_tasks < 1:
             raise ValueError("max_concurrent_tasks must be positive")

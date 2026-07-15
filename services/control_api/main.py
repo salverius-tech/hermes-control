@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
 
     @app.get("/diagnostics", dependencies=[Depends(require_auth)])
     def diagnostics() -> dict[str, str]:
+        plugin_socket = os.getenv("CONTROL_API_HERMES_PLUGIN_SOCKET")
         return {
             "version": "0.1.0",
             "storage": "sqlite" if store_path else "memory",
@@ -95,6 +97,9 @@ def create_app() -> FastAPI:
             "websocket_path": "/ws/events",
             "hermes_home": str(workspace.hermes_home),
             "hermes_home_available": str(workspace.available).lower(),
+            "bridge_configured": str(bool(plugin_socket)).lower(),
+            "bridge_socket_available": str(bool(plugin_socket and Path(plugin_socket).exists())).lower(),
+            "active_task_count": str(task_service.active_task_count),
         }
 
     @app.get("/tasks", dependencies=[Depends(require_auth)])
