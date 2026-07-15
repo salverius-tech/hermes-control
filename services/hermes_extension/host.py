@@ -59,11 +59,15 @@ class SubprocessHermesTaskHandler:
 
         async def read_stream(stream: asyncio.StreamReader, *, is_stdout: bool = False) -> list[str]:
             lines: list[str] = []
+            suppress_shutdown_noise = False
             async for raw_line in stream:
                 line = raw_line.decode(errors="replace").strip()
                 if line:
                     lines.append(line)
-                    await emit(PluginEvent(event_type="progress", request_id=request.request_id, message=line))
+                    if line == "Exception ignored on threading shutdown:":
+                        suppress_shutdown_noise = True
+                    if not suppress_shutdown_noise:
+                        await emit(PluginEvent(event_type="progress", request_id=request.request_id, message=line))
                     if is_stdout and line.startswith("Session:"):
                         completion_event.set()
             return lines

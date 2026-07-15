@@ -89,6 +89,29 @@ async def test_subprocess_handler_completes_on_hermes_session_footer():
     assert result == "result\nSession: test"
 
 
+@pytest.mark.anyio
+async def test_subprocess_handler_suppresses_interpreter_shutdown_traceback_from_progress():
+    handler = SubprocessHermesTaskHandler(
+        (
+            sys.executable,
+            "-c",
+            "import sys; print('result'); print('Exception ignored on threading shutdown:', file=sys.stderr); print('Traceback (most recent call last):', file=sys.stderr); print('KeyboardInterrupt:', file=sys.stderr)",
+        )
+    )
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    result = await handler.run(
+        PluginRequest("req-noise", "inspect", "default", "normal", "mobile", False),
+        emit=emit,
+    )
+
+    assert result == "result"
+    assert [event.message for event in events] == ["result"]
+
+
 def test_default_handler_disables_recursive_plugin_loading(monkeypatch):
     monkeypatch.delenv("HERMES_CONTROL_EXTENSION_HERMES_COMMAND", raising=False)
 
