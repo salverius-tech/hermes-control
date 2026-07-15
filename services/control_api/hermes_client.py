@@ -203,6 +203,8 @@ def _session_id_from_output(output: str) -> str | None:
 
 def _classify_failure(message: str) -> tuple[str, bool]:
     lowered = message.lower()
+    if "not configured" in lowered:
+        return "configuration", True
     if "connection refused" in lowered or "timed out" in lowered or "socket" in lowered:
         return "connectivity", True
     if "does not exist" in lowered or "folder" in lowered or "directory" in lowered:
@@ -219,10 +221,7 @@ def executor_from_environment() -> HermesExecutor:
     command = os.getenv("CONTROL_API_HERMES_COMMAND")
     if command:
         return LocalHermesCommandExecutor(tuple(shlex.split(command, posix=os.name != "nt")))
-    return FakeHermesExecutor(
-        result_summary="Hermes execution is not configured. Set CONTROL_API_HERMES_COMMAND to run real tasks.",
-        log_messages=["Task accepted by the local control API", "Hermes execution adapter is not configured"],
-    )
+    return FakeHermesExecutor(error="Hermes execution is not configured. Set CONTROL_API_HERMES_COMMAND or CONTROL_API_HERMES_PLUGIN_SOCKET to run real tasks.")
 
 
 TaskUpdateCallback = Callable[[TaskSummary], Awaitable[None]]

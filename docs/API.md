@@ -41,7 +41,11 @@ Auth: required.
   "schema_version": "1",
   "execution_mode": "command",
   "notification_mode": "discord",
-  "websocket_path": "/ws/events"
+  "websocket_path": "/ws/events",
+  "hermes_home_available": "true",
+  "bridge_configured": "true",
+  "bridge_socket_available": "true",
+  "executor_ready": "true"
 }
 ```
 
@@ -72,7 +76,7 @@ Auth: required.
 
 ### `POST /tasks`
 
-Creates a queued task and starts execution through the configured Hermes adapter. If `CONTROL_API_HERMES_COMMAND` is unset, the task completes through an explicit unconfigured adapter so clients can exercise the full lifecycle.
+Creates a queued task and starts execution through the configured Hermes adapter. When neither `CONTROL_API_HERMES_COMMAND` nor `CONTROL_API_HERMES_PLUGIN_SOCKET` is configured, the task becomes blocked with a configuration blocker instead of being reported as completed.
 
 Auth: required.
 
