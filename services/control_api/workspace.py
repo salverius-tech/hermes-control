@@ -165,6 +165,15 @@ class HermesWorkspaceStore:
             raise ValueError("folder does not exist")
         return sorted((str(child) for child in current.iterdir() if child.is_dir() and not child.name.startswith(".")), key=str.lower)
 
+    def validate_execution_folder(self, path: str) -> str:
+        resolved = Path(path).expanduser().resolve()
+        roots = [Path(item).expanduser().resolve() for item in __import__("os").getenv("CONTROL_API_PROJECT_ROOTS", str(Path.home() / "repos")).split(":") if item]
+        if not any(resolved == root or root in resolved.parents for root in roots):
+            raise ValueError("execution folder is outside approved project roots")
+        if not resolved.is_dir():
+            raise ValueError("execution folder does not exist")
+        return str(resolved)
+
     def _get_row(self, project_id: str) -> tuple | None:
         with sqlite3.connect(self.projects_path) as db:
             return db.execute(

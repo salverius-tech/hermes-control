@@ -7,13 +7,17 @@ from services.control_api.main import create_app
 pytestmark = pytest.mark.integration
 
 
+def auth_headers() -> dict[str, str]:
+    return {"Authorization": "Bearer dev-token"}
+
+
 def test_cancel_task_marks_existing_task_canceled(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())
     created = client.post(
         "/tasks",
         headers={"Authorization": "Bearer dev-token"},
-        json={"prompt": "Cancel this task"},
+        json={"prompt": "Cancel this task", "requires_approval": True},
     ).json()
 
     response = client.post(f"/tasks/{created['task_id']}/cancel", headers={"Authorization": "Bearer dev-token"})
@@ -101,3 +105,66 @@ def test_continue_task_creates_edited_retry_with_new_session(monkeypatch):
     assert edited["parent_task_id"] == created["task_id"]
     assert edited["root_task_id"] == created["task_id"]
     assert edited["relation"] == "edited_retry"
+
+
+def test_continue_task_requires_a_session(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    created = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "No session here", "requires_approval": True},
+    ).json()
+
+    response = client.post(
+        f"/tasks/{created['task_id']}/continue",
+        headers=auth_headers(),
+        json={"prompt": "Continue anyway"},
+    )
+
+    assert response.status_code == 409
+    assert "no Hermes session" in response.json()["detail"]
+
+
+def test_reject_non_approval_task_returns_conflict(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    created = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "Already executable"},
+    ).json()
+
+    response = client.post(f"/tasks/{created['task_id']}/reject", headers=auth_headers())
+
+    assert response.status_code == 409
+
+
+def test_repeated_approval_returns_conflict(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    created = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "Approve once", "requires_approval": True},
+    ).json()
+
+    first = client.post(f"/tasks/{created['task_id']}/approve", headers=auth_headers())
+    second = client.post(f"/tasks/{created['task_id']}/approve", headers=auth_headers())
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+
+
+def test_execution_folder_must_be_in_an_approved_root(monkeypatch, tmp_path):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "Reject unsafe cwd", "execution_folder": str(tmp_path)},
+    )
+
+    assert response.status_code == 400
+    assert "approved project roots" in response.json()["detail"]

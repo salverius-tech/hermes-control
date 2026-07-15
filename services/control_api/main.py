@@ -22,7 +22,7 @@ from .models import (
     TaskSummary,
 )
 from .notifications import notifier_from_environment
-from .projection import TaskProjection
+from .projection import TaskProjection, TaskStateError
 from .rate_limit import RateLimiter
 from .storage import SQLiteTaskStore
 from .websocket import ConnectionManager
@@ -66,6 +66,12 @@ def create_app() -> FastAPI:
         )
 
     def resolve_project_context(request: TaskCreateRequest) -> TaskCreateRequest:
+        if request.execution_folder:
+            try:
+                execution_folder = workspace.validate_execution_folder(request.execution_folder)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+            request = request.model_copy(update={"execution_folder": execution_folder})
         if not os.getenv("CONTROL_API_HERMES_HOME") or request.execution_folder:
             return request
         project = workspace.get_project(request.project_id)
@@ -120,7 +126,10 @@ def create_app() -> FastAPI:
         original = projection.get_task(task_id)
         if original is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-        task = projection.approve_task(task_id)
+        try:
+            task = projection.approve_task(task_id)
+        except TaskStateError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
         await connections.broadcast_task_updated(task)
         task_service.start_task(task, request_from_task(task, requires_approval=False), on_update=broadcast_task_update)
         return task
@@ -129,7 +138,10 @@ def create_app() -> FastAPI:
     async def reject_task(task_id: str) -> TaskSummary:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-        task = projection.reject_task(task_id)
+        try:
+            task = projection.reject_task(task_id)
+        except TaskStateError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
         await task_service.notify_task(task, event_type="task.rejected")
         await connections.broadcast_task_updated(task)
         return task
@@ -138,7 +150,10 @@ def create_app() -> FastAPI:
     async def cancel_task(task_id: str) -> TaskSummary:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-        return await task_service.cancel_task(task_id, on_update=broadcast_task_update)
+        try:
+            return await task_service.cancel_task(task_id, on_update=broadcast_task_update)
+        except TaskStateError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     @app.post("/tasks/{task_id}/retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
     async def retry_task(task_id: str) -> TaskSummary:
@@ -158,6 +173,8 @@ def create_app() -> FastAPI:
         original = projection.get_task(task_id)
         if original is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        if original.session_id is None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Task has no Hermes session to continue")
         task_request = TaskCreateRequest(
             prompt=request.prompt,
             project_id=original.project_id,

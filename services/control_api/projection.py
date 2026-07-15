@@ -9,6 +9,10 @@ from .storage import TaskStore
 from .workspace import HermesWorkspaceStore
 
 
+class TaskStateError(ValueError):
+    pass
+
+
 class TaskProjection:
     """Task read model and event projection for the mobile control API."""
 
@@ -63,6 +67,7 @@ class TaskProjection:
         return self._tasks.get(task_id)
 
     def cancel_task(self, task_id: str) -> TaskSummary:
+        self._require_status(task_id, {TaskStatus.AWAITING_APPROVAL, TaskStatus.QUEUED, TaskStatus.RUNNING})
         return self.update_task(
             task_id,
             status=TaskStatus.CANCELED,
@@ -71,6 +76,7 @@ class TaskProjection:
         )
 
     def approve_task(self, task_id: str) -> TaskSummary:
+        self._require_status(task_id, {TaskStatus.AWAITING_APPROVAL})
         return self.update_task(
             task_id,
             status=TaskStatus.QUEUED,
@@ -79,6 +85,7 @@ class TaskProjection:
         )
 
     def reject_task(self, task_id: str) -> TaskSummary:
+        self._require_status(task_id, {TaskStatus.AWAITING_APPROVAL})
         return self.update_task(
             task_id,
             status=TaskStatus.REJECTED,
@@ -88,6 +95,16 @@ class TaskProjection:
 
     def list_task_events(self, task_id: str) -> list[TaskEvent]:
         return sorted(self._events.get(task_id, []), key=lambda event: event.created_at)
+
+    def _require_status(self, task_id: str, allowed: set[TaskStatus]) -> TaskSummary:
+        task = self._tasks.get(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        current = TaskStatus(task.status)
+        if current not in allowed:
+            expected = ", ".join(item.value for item in sorted(allowed, key=lambda item: item.value))
+            raise TaskStateError(f"task is {current.value}; expected one of: {expected}")
+        return task
 
     def update_task(
         self,
