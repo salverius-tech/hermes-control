@@ -181,6 +181,26 @@ class HermesWorkspaceStore:
             raise ValueError("execution folder does not exist")
         return str(resolved)
 
+    def validate_project_execution_folder(self, project_id: str, path: str) -> str:
+        resolved = self.validate_execution_folder(path)
+        project = self.get_project(project_id)
+        if project is None:
+            raise ValueError(f"unknown Hermes project: {project_id}")
+        if not any(_is_within(resolved, folder) for folder in project.folders):
+            raise ValueError("execution folder is not part of the selected Hermes project")
+        return resolved
+
+    def validate_session(self, session_id: str, project_id: str) -> None:
+        if not self.state_path.exists():
+            raise ValueError(f"Hermes session not found: {session_id}")
+        project = self.get_project(project_id)
+        if project is None:
+            raise ValueError(f"unknown Hermes project: {project_id}")
+        with sqlite3.connect(self.state_path) as db:
+            row = db.execute("SELECT cwd, archived FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        if row is None or row[1] or not any(_is_within(row[0], folder) for folder in project.folders):
+            raise ValueError(f"Hermes session is not valid for project: {session_id}")
+
     def _get_row(self, project_id: str) -> tuple | None:
         with sqlite3.connect(self.projects_path) as db:
             return db.execute(

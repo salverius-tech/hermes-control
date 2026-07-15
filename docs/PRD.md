@@ -466,14 +466,18 @@ Enhanced deployment validation should additionally cover TLS validation, token a
 
 The remaining non-device implementation priorities are:
 
-1. Implement deterministic mobile WebSocket reconciliation and connection state UI.
-3. Improve mobile offline/error-state behavior, including the first version of a local pending-task queue.
-4. Add stream/reconciliation data-model foundations so future token/event/state streaming does not require rewriting task state management.
-5. Harden voice UX permissions, unavailable-provider handling, and edit-before-submit states.
-6. Continue mobile UI polish and shared component cleanup.
-7. Add request rate limiting for multiple devices/users.
-8. Add richer approval audit metadata in Control API events.
-9. Replace the subprocess handler with native Hermes task/lifecycle hooks if the host API exposes them.
+1. Add sequence numbers and explicit gap detection to the WebSocket protocol.
+2. Add richer project metrics/events and the safe read-only artifact browser.
+3. Replace the subprocess handler with native Hermes task/lifecycle hooks if the host API exposes them.
+4. Expand the offline queue UI with visible pending/retrying task records and user-controlled retry/cancel actions.
+
+Completed in the current implementation slice:
+
+- Deterministic mobile task merging, stale-event rejection, reconnect backoff, and authoritative refresh.
+- Offline pending-task persistence with idempotent retry submission.
+- Voice permission/provider failure handling.
+- API mutation rate limiting.
+- Approval/rejection audit metadata.
 
 Deferred until the user can provide the phone/LXC environment:
 

@@ -101,11 +101,20 @@ Validation:
 
 Response: `201 Created` with the initial queued `TaskSummary`.
 
+Clients may send an `Idempotency-Key` header when retrying a submission. Reusing
+that key returns the original task instead of creating a duplicate.
+
 ### `POST /tasks/{task_id}/approve`
 
 Approves a task in `awaiting_approval`, records `task.approved`, broadcasts `task.updated`, and starts execution through the configured adapter.
 
-Auth: required.
+Auth: required. The optional request body records audit metadata:
+
+```json
+{ "actor": "operator", "device_id": "phone-1", "reason": "Reviewed" }
+```
+
+The API appends an `approval.audit` event with the actor, device, reason, and server timestamp.
 
 Response: `200 OK` with the updated `TaskSummary` whose status moves back to `queued` before execution begins.
 
@@ -117,7 +126,7 @@ Errors:
 
 Rejects an approval-required task, records `task.rejected`, and broadcasts `task.updated`.
 
-Auth: required.
+Auth: required. It accepts the same optional audit metadata body as approval.
 
 Response: `200 OK` with the updated `TaskSummary` whose `status` is `rejected`.
 
@@ -310,7 +319,7 @@ Set `CONTROL_API_HERMES_COMMAND` to run a local Hermes command for submitted tas
 CONTROL_API_HERMES_COMMAND='hermes chat -q'
 ```
 
-When unset, the API uses an unconfigured adapter that records a completed lifecycle explaining that real Hermes execution has not been configured.
+When unset, the API uses an unconfigured adapter that records an actionable `blocked` lifecycle explaining that real Hermes execution has not been configured. It does not report the task as successfully completed.
 
 ## Notifications
 

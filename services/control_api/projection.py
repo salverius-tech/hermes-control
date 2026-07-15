@@ -44,6 +44,7 @@ class TaskProjection:
             root_task_id=request.root_task_id,
             session_id=request.session_id,
             relation=request.relation,
+            idempotency_key=request.idempotency_key,
             status=TaskStatus.AWAITING_APPROVAL if request.requires_approval else TaskStatus.QUEUED,
             created_at=now,
             updated_at=now,
@@ -65,6 +66,9 @@ class TaskProjection:
 
     def get_task(self, task_id: str) -> TaskSummary | None:
         return self._tasks.get(task_id)
+
+    def get_task_by_idempotency_key(self, key: str) -> TaskSummary | None:
+        return next((task for task in self._tasks.values() if task.idempotency_key == key), None)
 
     def cancel_task(self, task_id: str) -> TaskSummary:
         self._require_status(task_id, {TaskStatus.AWAITING_APPROVAL, TaskStatus.QUEUED, TaskStatus.RUNNING})
@@ -155,8 +159,9 @@ class TaskProjection:
         event_type: str,
         status: TaskStatus | None = None,
         message: str | None = None,
+        metadata: dict[str, object] | None = None,
     ) -> TaskEvent:
-        event = TaskEvent(task_id=task_id, event_type=event_type, status=status, message=message)
+        event = TaskEvent(task_id=task_id, event_type=event_type, status=status, message=message, metadata=metadata or {})
         self._events[task_id].append(event)
         if self._store is not None:
             self._store.save_event(event)

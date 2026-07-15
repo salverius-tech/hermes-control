@@ -9,6 +9,7 @@ import { apiFetch, TaskSummary } from '@/api/client';
 import { clearTaskDraft, loadTaskDraft, saveTaskDraft } from '@/features/tasks/draft';
 import { appendTranscript } from '@/features/tasks/prompt';
 import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/features/tasks/request';
+import { enqueueTask, flushTaskQueue } from '@/features/tasks/offline-queue';
 import { applyPromptTemplate, promptTemplates } from '@/features/tasks/templates';
 import { ExpandableDetails } from '@/components/ExpandableDetails';
 import { bottomNavigationHeight } from '@/navigation/constants';
@@ -30,11 +31,18 @@ export default function NewTaskScreen() {
   const [partialTranscript, setPartialTranscript] = useState('');
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const skipNextDraftSave = useRef(false);
 
-  useEffect(() => { if (apiToken) void refreshData(); }, [apiToken, refreshData]);
+  useEffect(() => {
+    if (!apiToken) return;
+    void refreshData();
+    void flushTaskQueue(AsyncStorage, apiUrl, apiToken).then((submitted) => {
+      if (submitted.length > 0) setQueueNotice(`${submitted.length} queued task${submitted.length === 1 ? '' : 's'} submitted.`);
+    });
+  }, [apiToken, apiUrl, refreshData]);
   useEffect(() => { if (projectId === 'default') void AsyncStorage.getItem('hmc.lastProject').then((value) => { if (value) setProjectId(value); }); }, [projectId]);
 
   useEffect(() => {
@@ -99,23 +107,29 @@ export default function NewTaskScreen() {
   });
 
   async function toggleVoiceInput() {
-    if (listening) {
-      ExpoSpeechRecognitionModule.stop();
-      return;
-    }
+    try {
+      if (listening) {
+        ExpoSpeechRecognitionModule.stop();
+        return;
+      }
 
-    const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!permission.granted) {
-      setVoiceError('Microphone and speech recognition permission are required for voice prompts.');
-      return;
-    }
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!permission.granted) {
+        setVoiceError('Microphone and speech recognition permission are required for voice prompts.');
+        return;
+      }
 
-    setVoiceError(null);
-    ExpoSpeechRecognitionModule.start({
-      continuous: false,
-      interimResults: true,
-      lang: 'en-US',
-    });
+      setVoiceError(null);
+      ExpoSpeechRecognitionModule.start({
+        continuous: false,
+        interimResults: true,
+        lang: 'en-US',
+      });
+    } catch (err) {
+      setListening(false);
+      setPartialTranscript('');
+      setVoiceError(err instanceof Error ? `Voice input unavailable: ${err.message}` : 'Voice input is unavailable on this device.');
+    }
   }
 
   async function submit() {
@@ -123,8 +137,10 @@ export default function NewTaskScreen() {
     try {
       setSubmitting(true);
       const request = buildTaskCreateRequest({ prompt, projectId, priority, requiresApproval });
+      const idempotencyKey = `mobile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const task = await apiFetch<TaskSummary>(apiUrl, apiToken, '/tasks', {
         method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify(request),
       });
       await AsyncStorage.setItem('hmc.lastProject', request.project_id);
@@ -135,7 +151,13 @@ export default function NewTaskScreen() {
       setRequiresApproval(false);
       router.replace(`/tasks/${task.task_id}`);
     } catch (err) {
-      Alert.alert('Task failed', err instanceof Error ? err.message : 'Unknown error');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      if (!message.startsWith('API ')) {
+        await enqueueTask(AsyncStorage, request, new Date(), idempotencyKey);
+        setQueueNotice('API unavailable. Task saved locally and will retry when the connection returns.');
+        return;
+      }
+      Alert.alert('Task failed', message);
     } finally {
       setSubmitting(false);
     }
@@ -240,6 +262,7 @@ export default function NewTaskScreen() {
       {listening ? <Text style={styles.listening}>Listening… speak your Hermes instruction now.</Text> : null}
       {partialTranscript ? <Text style={styles.partial}>Heard: {partialTranscript}</Text> : null}
       {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
+      {queueNotice ? <Text style={styles.help}>{queueNotice}</Text> : null}
 
       {!apiToken ? <Text style={styles.help}>Configure your API token in Settings first.</Text> : null}
       <Text style={styles.help}>Use voice dictation or type directly. Voice transcription stays on-device/OS-level through the phone speech service.</Text>

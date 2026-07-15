@@ -1,9 +1,8 @@
 import { Link } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { apiFetch, AgentStatus, Diagnostics, ProjectSummary, TaskSummary } from '@/api/client';
+import { TaskSummary } from '@/api/client';
 import { EmptyState } from '@/components/EmptyState';
 import { MetricCard } from '@/components/MetricCard';
 import { MetadataRow } from '@/components/MetadataRow';
@@ -11,42 +10,11 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { StatusPill } from '@/components/StatusPill';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useDataStore } from '@/state/data-store';
-import { useSettingsStore } from '@/state/settings';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function DashboardScreen() {
-  const { apiUrl, apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
-  const websocket = useDataStore((state) => state.websocket);
-  const [tasks, setTasks] = useState<TaskSummary[]>([]);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [agents, setAgents] = useState<AgentStatus[]>([]);
-  const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [offline, setOffline] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      try {
-        setLoading(true);
-        const [taskResult, projectResult, agentResult, diagnosticResult] = await Promise.all([
-          apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks'),
-          apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
-          apiFetch<AgentStatus[]>(apiUrl, apiToken, '/agents'),
-          apiFetch<Diagnostics>(apiUrl, apiToken, '/diagnostics'),
-        ]);
-        if (!mounted) return;
-        setTasks(taskResult); setProjects(projectResult); setAgents(agentResult); setDiagnostics(diagnosticResult); setOffline(false);
-      } catch {
-        if (mounted) setOffline(true);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-    if (apiToken) void load(); else setLoading(false);
-    return () => { mounted = false; };
-  }, [apiToken, apiUrl]);
+  const { tasks, projects, agents, diagnostics, websocket, offline, lastSync } = useDataStore();
 
   const attention = tasks.filter((task) => ['awaiting_approval', 'failed', 'blocked'].includes(task.status));
   const running = tasks.filter((task) => task.status === 'running' || task.status === 'queued');
@@ -61,7 +29,7 @@ export default function DashboardScreen() {
         <Text style={styles.subtitle}>Review what needs a decision, then return to the right project.</Text>
       </View>
       {offline ? <Text style={styles.warning}>Showing the last available state. Reconnect to reconcile.</Text> : null}
-      {loading ? <ActivityIndicator color={colors.primary} /> : null}
+      {!lastSync && !offline ? <ActivityIndicator color={colors.primary} /> : null}
 
       <View style={styles.grid}>
         <MetricCard title="Needs attention" subtitle="Approval, blocker, or failure"><Text style={[styles.metric, attention.length > 0 && styles.warningText]}>{attention.length}</Text></MetricCard>
@@ -74,17 +42,17 @@ export default function DashboardScreen() {
 
       <View style={styles.section}><SectionHeader actionHref="/attention" actionLabel="View all" count={attention.length} title="Needs attention" />
         {attention.slice(0, 3).map((task) => <TaskRow key={task.task_id} task={task} />)}
-        {!loading && attention.length === 0 ? <EmptyState body="Approvals, blockers, and failures will appear here." title="All clear" /> : null}
+        {(!lastSync && !offline) ? null : attention.length === 0 ? <EmptyState body="Approvals, blockers, and failures will appear here." title="All clear" /> : null}
       </View>
 
       <View style={styles.section}><SectionHeader actionHref="/tasks" actionLabel="View all" count={running.length} title="Active work" />
         {running.slice(0, 3).map((task) => <TaskRow key={task.task_id} task={task} />)}
-        {!loading && running.length === 0 ? <EmptyState body="Start a task from a project when you are ready." title="Nothing running" /> : null}
+        {(!lastSync && !offline) ? null : running.length === 0 ? <EmptyState body="Start a task from a project when you are ready." title="Nothing running" /> : null}
       </View>
 
       <View style={styles.section}><SectionHeader actionHref="/projects" actionLabel="View all" count={projects.length} title="Projects" />
         {projects.slice(0, 4).map((project) => <Link key={project.project_id} href={`/projects/${encodeURIComponent(project.project_id)}`} asChild><Pressable style={({ pressed }) => [styles.project, pressed && styles.pressed]}><View style={styles.projectCopy}><Text numberOfLines={1} style={styles.projectName}>{project.name}</Text><MetadataRow label="Active" value={`${project.running_count + project.queued_count} tasks`} /></View><Text style={styles.chevron}>›</Text></Pressable></Link>)}
-        {!loading && projects.length === 0 ? <EmptyState body="Configure the API in Settings to load workspaces." title="No projects yet" /> : null}
+        {(!lastSync && !offline) ? null : projects.length === 0 ? <EmptyState body="Configure the API in Settings to load workspaces." title="No projects yet" /> : null}
       </View>
     </ScrollView>
   );

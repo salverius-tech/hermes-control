@@ -7,12 +7,13 @@ import shutil
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 
 from .auth import expected_token, require_auth
 from .hermes_client import HermesTaskService
 from .models import (
     AgentStatus,
+    ApprovalRequest,
     FolderRequest,
     GuidanceRequest,
     ProjectCreateRequest,
@@ -119,7 +120,12 @@ def create_app() -> FastAPI:
         return projection.list_tasks()
 
     @app.post("/tasks", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
-    async def create_task(request: TaskCreateRequest) -> TaskSummary:
+    async def create_task(request: TaskCreateRequest, idempotency_key: str | None = Header(default=None)) -> TaskSummary:
+        if idempotency_key:
+            existing = projection.get_task_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                return existing
+            request = request.model_copy(update={"idempotency_key": idempotency_key})
         request = resolve_project_context(request)
         task = await task_service.submit_task(request, on_update=broadcast_task_update)
         await connections.broadcast_task_created(task)
@@ -127,8 +133,8 @@ def create_app() -> FastAPI:
             task_service.start_task(task, request, on_update=broadcast_task_update)
         return task
 
-    @app.post("/tasks/{task_id}/approve", dependencies=[Depends(require_auth)])
-    async def approve_task(task_id: str) -> TaskSummary:
+    @app.post("/tasks/{task_id}/approve", dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
+    async def approve_task(task_id: str, request: ApprovalRequest | None = None) -> TaskSummary:
         original = projection.get_task(task_id)
         if original is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -136,23 +142,27 @@ def create_app() -> FastAPI:
             task = projection.approve_task(task_id)
         except TaskStateError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        approval = request or ApprovalRequest()
+        projection.record_event(task_id, event_type="approval.audit", status=task.status, message=approval.reason, metadata=approval.model_dump())
         await connections.broadcast_task_updated(task)
         task_service.start_task(task, request_from_task(task, requires_approval=False), on_update=broadcast_task_update)
         return task
 
-    @app.post("/tasks/{task_id}/reject", dependencies=[Depends(require_auth)])
-    async def reject_task(task_id: str) -> TaskSummary:
+    @app.post("/tasks/{task_id}/reject", dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
+    async def reject_task(task_id: str, request: ApprovalRequest | None = None) -> TaskSummary:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         try:
             task = projection.reject_task(task_id)
         except TaskStateError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        approval = request or ApprovalRequest()
+        projection.record_event(task_id, event_type="approval.audit", status=task.status, message=approval.reason, metadata=approval.model_dump())
         await task_service.notify_task(task, event_type="task.rejected")
         await connections.broadcast_task_updated(task)
         return task
 
-    @app.post("/tasks/{task_id}/cancel", dependencies=[Depends(require_auth)])
+    @app.post("/tasks/{task_id}/cancel", dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
     async def cancel_task(task_id: str) -> TaskSummary:
         if projection.get_task(task_id) is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

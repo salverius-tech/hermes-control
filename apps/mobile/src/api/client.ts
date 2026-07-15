@@ -32,6 +32,7 @@ export type TaskEvent = {
   event_type: string;
   status?: TaskStatus | null;
   message?: string | null;
+  metadata?: Record<string, unknown>;
   created_at: string;
 };
 

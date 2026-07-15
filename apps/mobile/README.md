@@ -5,9 +5,9 @@ Expo React Native app for Android-first Hermes monitoring and task creation.
 ## Setup
 
 ```bash
-npm install
-npm run typecheck
-npm start
+pnpm install
+pnpm run typecheck
+pnpm start
 ```
 
 ## Screens

@@ -96,3 +96,29 @@ def test_create_task_can_be_read_back_by_id(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["prompt"] == "Open a Hermes planning session"
+
+
+def test_mutating_task_requests_are_rate_limited(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    monkeypatch.setenv("CONTROL_API_RATE_LIMIT_PER_MINUTE", "1")
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer dev-token"}
+    payload = {"prompt": "first", "project_id": "default"}
+
+    assert client.post("/tasks", headers=headers, json=payload).status_code == 201
+    response = client.post("/tasks", headers=headers, json={**payload, "prompt": "second"})
+
+    assert response.status_code == 429
+
+
+def test_idempotency_key_returns_the_original_task(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer dev-token", "Idempotency-Key": "local-1"}
+
+    first = client.post("/tasks", headers=headers, json={"prompt": "first"})
+    second = client.post("/tasks", headers=headers, json={"prompt": "different retry"})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert second.json()["task_id"] == first.json()["task_id"]

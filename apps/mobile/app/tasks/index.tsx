@@ -1,14 +1,12 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Link } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { readCache, writeCache } from '@/api/cache';
-import { apiFetch, TaskStatus, TaskSummary } from '@/api/client';
-import { createEventsSocket, parseLiveEvent } from '@/api/events';
+import { TaskStatus } from '@/api/client';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { StatusPill } from '@/components/StatusPill';
+import { useDataStore } from '@/state/data-store';
 import { useSettingsStore } from '@/state/settings';
 import { colors, spacing } from '@/theme/tokens';
 
@@ -23,7 +21,9 @@ const filters: Array<{ label: string; value: TaskStatus | 'all' | 'attention' }>
 export default function TasksScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
-  const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const tasks = useDataStore((state) => state.tasks);
+  const refresh = useDataStore((state) => state.refresh);
+  const offline = useDataStore((state) => state.offline);
   const [filter, setFilter] = useState<(typeof filters)[number]['value']>('all');
   const [error, setError] = useState<string | null>(null);
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
@@ -35,16 +35,10 @@ export default function TasksScreen() {
     try {
       if (showSpinner) setRefreshing(true);
       setError(null);
-      const result = await apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks');
-      await writeCache(AsyncStorage, 'tasks:list', result);
-      setTasks(result);
+      await refresh();
       setCacheNotice(null);
     } catch (err) {
-      const cached = await readCache<TaskSummary[]>(AsyncStorage, 'tasks:list');
-      if (cached) {
-        setTasks(cached);
-        setCacheNotice('Showing cached tasks while the API is unavailable.');
-      }
+      if (offline) setCacheNotice('Showing cached tasks while the API is unavailable.');
       setError(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
       setLoading(false);
@@ -55,19 +49,9 @@ export default function TasksScreen() {
   useEffect(() => {
     if (!apiToken) { setLoading(false); return; }
     void loadTasks();
-    const interval = setInterval(() => void loadTasks(), 15000);
-    const socket = createEventsSocket(apiUrl, apiToken);
-    socket.onmessage = (message) => {
-      const event = parseLiveEvent(message.data);
-      if (!event) return;
-      if (event.type === 'snapshot') setTasks(event.tasks);
-      if (event.type === 'task.created' || event.type === 'task.updated') {
-        setTasks((current) => [event.task, ...current.filter((task) => task.task_id !== event.task.task_id)]);
-      }
-    };
-    socket.onerror = () => socket.close();
-    return () => { clearInterval(interval); socket.close(); };
-  }, [apiToken, apiUrl]);
+    const interval = setInterval(() => void loadTasks(), 30000);
+    return () => clearInterval(interval);
+  }, [apiToken, refresh]);
 
   const visibleTasks = useMemo(() => tasks.filter((task) => {
     if (query.trim() && !`${task.title} ${task.prompt} ${task.project_id}`.toLowerCase().includes(query.trim().toLowerCase())) return false;
@@ -86,7 +70,7 @@ export default function TasksScreen() {
       </ScrollView>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
       {!apiToken ? <Text style={styles.muted}>Configure your API token in Settings.</Text> : null}
-      {cacheNotice ? <Text style={styles.muted}>{cacheNotice}</Text> : null}
+      {cacheNotice || offline ? <Text style={styles.muted}>{cacheNotice || 'Showing cached tasks while the API is unavailable.'}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {visibleTasks.length === 0 && !loading ? <Text style={styles.muted}>No tasks in this view.</Text> : null}
       {visibleTasks.map((task) => (

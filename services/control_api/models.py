@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -29,6 +29,7 @@ class TaskCreateRequest(BaseModel):
     session_id: str | None = None
     relation: Literal["original", "retry", "edited_retry", "continuation", "follow_up"] = "original"
     execution_folder: str | None = None
+    idempotency_key: str | None = None
 
     @field_validator("prompt")
     @classmethod
@@ -71,6 +72,7 @@ class TaskSummary(BaseModel):
     session_id: str | None = None
     relation: str = "original"
     execution_folder: str | None = None
+    idempotency_key: str | None = None
 
 
 class TaskEvent(BaseModel):
@@ -80,6 +82,7 @@ class TaskEvent(BaseModel):
     event_type: str
     status: TaskStatus | None = None
     message: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -147,4 +150,18 @@ class GuidanceRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("prompt must not be blank")
+        return stripped
+
+
+class ApprovalRequest(BaseModel):
+    actor: str = "mobile-user"
+    device_id: str | None = None
+    reason: str | None = None
+
+    @field_validator("actor")
+    @classmethod
+    def actor_must_not_be_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("actor must not be blank")
         return stripped

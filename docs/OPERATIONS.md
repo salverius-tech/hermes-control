@@ -38,9 +38,9 @@ For the Proxmox LXC where Hermes is already installed and exposed through Caddy,
 
 ```bash
 cd apps/mobile
-npm install
-npm run typecheck
-npm start
+pnpm install
+pnpm run typecheck
+pnpm start
 ```
 
 For physical Android devices, configure the mobile app with the host LAN IP/Tailscale hostname, not `127.0.0.1`.
