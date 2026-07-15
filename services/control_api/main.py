@@ -241,6 +241,50 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
         return project
 
+    @app.get("/projects/{project_id}/metrics", dependencies=[Depends(require_auth)])
+    def project_metrics(project_id: str) -> dict[str, int | str]:
+        project = projection.get_project(project_id, include_archived=True)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        tasks = [task for task in projection.list_tasks() if task.project_id == project_id]
+        return {
+            "project_id": project_id,
+            "total": len(tasks),
+            "attention": sum(task.status in {"awaiting_approval", "failed", "blocked"} for task in tasks),
+            "active": sum(task.status in {"queued", "running"} for task in tasks),
+            "completed": sum(task.status == "completed" for task in tasks),
+            "failed": sum(task.status in {"failed", "canceled", "rejected"} for task in tasks),
+        }
+
+    @app.get("/projects/{project_id}/events", dependencies=[Depends(require_auth)])
+    def project_events(project_id: str, limit: int = 100) -> list[TaskEvent]:
+        project = projection.get_project(project_id, include_archived=True)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        events = [event for task in projection.list_tasks() if task.project_id == project_id for event in projection.list_task_events(task.task_id)]
+        return sorted(events, key=lambda event: event.created_at, reverse=True)[: min(max(limit, 1), 500)]
+
+    @app.get("/projects/{project_id}/files", dependencies=[Depends(require_auth)])
+    def project_files(project_id: str, path: str | None = None) -> list[dict[str, str | int]]:
+        project = projection.get_project(project_id, include_archived=True)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        entries: list[dict[str, str | int]] = []
+        for folder in project.folders:
+            root = Path(folder).expanduser().resolve()
+            current = (root / path).resolve() if path else root
+            if not current.is_relative_to(root) or not current.is_dir():
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="path is outside the project folder")
+            for child in sorted(current.iterdir(), key=lambda item: item.name.lower()):
+                if child.name.startswith("."):
+                    continue
+                relative = str(child.relative_to(root))
+                item: dict[str, str | int] = {"path": relative, "name": child.name, "kind": "directory" if child.is_dir() else "file"}
+                if child.is_file():
+                    item["size"] = child.stat().st_size
+                entries.append(item)
+        return entries
+
     @app.post("/projects", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth)])
     def create_project(request: ProjectCreateRequest) -> ProjectSummary:
         try:

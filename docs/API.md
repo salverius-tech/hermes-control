@@ -212,6 +212,18 @@ Project selection is request context only. It does not call `hermes project use`
 
 Returns one Hermes-native project, including its primary folder and folder membership.
 
+### `GET /projects/{project_id}/metrics`
+
+Returns task counts for one project: total, attention, active, completed, and failed.
+
+### `GET /projects/{project_id}/events`
+
+Returns the newest task events associated with a project. Use `limit` to bound the response.
+
+### `GET /projects/{project_id}/files`
+
+Lists non-hidden files and directories under the project's configured folders. An optional `path` is relative to each project folder; traversal outside the configured folder is rejected. The endpoint is read-only.
+
 ### `POST /projects`
 
 Creates a Hermes-native project. Folder paths are validated against `CONTROL_API_PROJECT_ROOTS`.

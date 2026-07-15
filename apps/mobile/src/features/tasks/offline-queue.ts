@@ -52,6 +52,15 @@ export async function enqueueTask(storage: QueueStorage, request: TaskCreateRequ
   return item;
 }
 
+export async function removeQueuedTask(storage: QueueStorage, localId: string): Promise<void> {
+  const queue = await loadTaskQueue(storage);
+  await saveTaskQueue(storage, queue.filter((item) => item.local_id !== localId));
+}
+
+export async function retryQueuedTask(storage: QueueStorage, localId: string, now = new Date()): Promise<void> {
+  const queue = await loadTaskQueue(storage);
+  await saveTaskQueue(storage, queue.map((item) => item.local_id === localId ? { ...item, state: 'pending', attempts: 0, next_attempt_at: now.toISOString() } : item));
+}
 export async function flushTaskQueue(
   storage: QueueStorage,
   apiUrl: string,

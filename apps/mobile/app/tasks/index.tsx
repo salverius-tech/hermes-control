@@ -1,4 +1,5 @@
 import { Link } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +8,7 @@ import { TaskStatus } from '@/api/client';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { StatusPill } from '@/components/StatusPill';
 import { useDataStore } from '@/state/data-store';
+import { removeQueuedTask, retryQueuedTask } from '@/features/tasks/offline-queue';
 import { useSettingsStore } from '@/state/settings';
 import { colors, spacing } from '@/theme/tokens';
 
@@ -22,6 +24,7 @@ export default function TasksScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
   const tasks = useDataStore((state) => state.tasks);
+  const queuedTasks = useDataStore((state) => state.queuedTasks);
   const refresh = useDataStore((state) => state.refresh);
   const offline = useDataStore((state) => state.offline);
   const [filter, setFilter] = useState<(typeof filters)[number]['value']>('all');
@@ -72,6 +75,16 @@ export default function TasksScreen() {
       {!apiToken ? <Text style={styles.muted}>Configure your API token in Settings.</Text> : null}
       {cacheNotice || offline ? <Text style={styles.muted}>{cacheNotice || 'Showing cached tasks while the API is unavailable.'}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {queuedTasks.map((item) => (
+        <View key={item.local_id} style={styles.queuedCard}>
+          <View style={styles.cardTop}><Text style={styles.title} numberOfLines={2}>{item.request.prompt}</Text><Text style={styles.queueStatus}>{item.state}</Text></View>
+          <Text style={styles.meta}>Saved locally · attempt {item.attempts}</Text>
+          <View style={styles.queueActions}>
+            <Pressable onPress={() => void retryQueuedTask(AsyncStorage, item.local_id).then(refresh)} style={styles.queueButton}><Text style={styles.queueButtonText}>Retry now</Text></Pressable>
+            <Pressable onPress={() => void removeQueuedTask(AsyncStorage, item.local_id).then(refresh)} style={styles.queueCancel}><Text style={styles.queueButtonText}>Discard</Text></Pressable>
+          </View>
+        </View>
+      ))}
       {visibleTasks.length === 0 && !loading ? <Text style={styles.muted}>No tasks in this view.</Text> : null}
       {visibleTasks.map((task) => (
         <Link key={task.task_id} href={`/tasks/${task.task_id}`} asChild>
@@ -101,6 +114,12 @@ const styles = StyleSheet.create({
   muted: { color: colors.muted, fontSize: 15, lineHeight: 21 },
   pressed: { opacity: 0.75 },
   prompt: { color: colors.muted, fontSize: 15, lineHeight: 21 },
+  queueActions: { flexDirection: 'row', gap: spacing.sm },
+  queueButton: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  queueButtonText: { color: colors.background, fontWeight: '800' },
+  queueCancel: { backgroundColor: colors.danger, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  queuedCard: { backgroundColor: colors.elevated, borderColor: colors.warning, borderRadius: 20, borderWidth: 1, gap: spacing.sm, padding: spacing.lg },
+  queueStatus: { color: colors.warning, fontWeight: '900', textTransform: 'uppercase' },
   search: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, color: colors.text, padding: spacing.md },
   title: { color: colors.text, flex: 1, fontSize: 17, fontWeight: '800' },
 });

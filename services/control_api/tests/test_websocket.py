@@ -39,6 +39,7 @@ def test_websocket_sends_initial_snapshot(monkeypatch):
         message = websocket.receive_json()
 
     assert message["type"] == "snapshot"
+    assert message["seq"] == 0
     assert message["tasks"] == []
     assert message["projects"][0]["project_id"] == "default"
     assert message["agents"][0]["agent_id"] == "hermes-agent"
@@ -59,4 +60,5 @@ def test_websocket_broadcasts_task_created(monkeypatch):
 
     assert response.status_code == 201
     assert message["type"] == "task.created"
+    assert message["seq"] == 1
     assert message["task"]["prompt"] == "Broadcast this task"

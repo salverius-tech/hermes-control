@@ -466,18 +466,15 @@ Enhanced deployment validation should additionally cover TLS validation, token a
 
 The remaining non-device implementation priorities are:
 
-1. Add sequence numbers and explicit gap detection to the WebSocket protocol.
-2. Add richer project metrics/events and the safe read-only artifact browser.
-3. Replace the subprocess handler with native Hermes task/lifecycle hooks if the host API exposes them.
-4. Expand the offline queue UI with visible pending/retrying task records and user-controlled retry/cancel actions.
+1. Replace the subprocess handler with native Hermes task/lifecycle hooks if the host API exposes them.
+2. Run mobile TypeScript/Vitest verification once the Node/pnpm toolchain is available.
 
 Completed in the current implementation slice:
 
-- Deterministic mobile task merging, stale-event rejection, reconnect backoff, and authoritative refresh.
-- Offline pending-task persistence with idempotent retry submission.
-- Voice permission/provider failure handling.
-- API mutation rate limiting.
-- Approval/rejection audit metadata.
+- Versioned WebSocket sequence numbers with mobile gap detection and authoritative refresh.
+- Project metrics and event endpoints.
+- Safe project-relative read-only file listing with traversal protection.
+- Visible pending/retrying offline task cards with retry/discard controls.
 
 Deferred until the user can provide the phone/LXC environment:
 

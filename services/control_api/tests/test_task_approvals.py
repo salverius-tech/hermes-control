@@ -71,6 +71,35 @@ def test_reject_task_records_rejection(monkeypatch):
     assert events[-2]["event_type"] == "task.rejected"
 
 
+def test_project_metrics_and_events_are_available(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    headers = auth_headers()
+    task = client.post("/tasks", headers=headers, json={"prompt": "Inspect project"}).json()
+
+    metrics = client.get("/projects/default/metrics", headers=headers)
+    events = client.get("/projects/default/events", headers=headers)
+
+    assert metrics.status_code == 200
+    assert metrics.json()["total"] == 1
+    assert events.status_code == 200
+    assert events.json()[0]["task_id"] == task["task_id"]
+
+
+def test_project_files_rejects_path_traversal(monkeypatch, tmp_path):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    monkeypatch.setenv("CONTROL_API_PROJECT_ROOTS", str(tmp_path))
+    client = TestClient(create_app())
+    headers = auth_headers()
+    project_db = tmp_path / ".hermes" / "projects.db"
+    project_db.parent.mkdir()
+    # The synthetic projection has no folders, so a traversal request must not expose host paths.
+    response = client.get("/projects/default/files?path=..", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_approve_unknown_task_returns_404(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())
