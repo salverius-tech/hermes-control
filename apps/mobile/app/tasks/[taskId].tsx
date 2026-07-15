@@ -120,7 +120,7 @@ export default function TaskDetailScreen() {
     if (!task) return;
     try {
       setActionPending(true); setError(null);
-      const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${task.task_id}/continue`, { method: 'POST', body: JSON.stringify({ prompt: task.prompt, requires_approval: false, new_session: true, relation: 'retry' }) });
+      const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${task.task_id}/retry`, { method: 'POST' });
       router.replace(`/tasks/${next.task_id}`);
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to retry task'); }
     finally { setActionPending(false); }
