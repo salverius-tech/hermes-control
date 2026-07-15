@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.control_api.main import create_app
+from services.control_api.workspace import HermesWorkspaceStore
 
 
 pytestmark = pytest.mark.integration
@@ -25,6 +26,6 @@ def test_diagnostics_reports_backend_storage_and_execution_mode(monkeypatch, tmp
         "execution_mode": "command",
         "notification_mode": "discord",
         "websocket_path": "/ws/events",
-        "hermes_home": "/home/anvil/.hermes",
-        "hermes_home_available": "true",
+        "hermes_home": str(HermesWorkspaceStore().hermes_home),
+        "hermes_home_available": str(HermesWorkspaceStore().available).lower(),
     }
