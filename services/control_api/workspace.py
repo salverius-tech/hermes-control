@@ -108,11 +108,15 @@ class HermesWorkspaceStore:
         if project is None:
             raise KeyError(project_id)
         self._validate_folders([path])
+        folders = self._folder_rows(project[0])
+        make_primary = not folders
         with sqlite3.connect(self.projects_path) as db:
             db.execute(
-                "INSERT OR IGNORE INTO project_folders (project_id, path, label, is_primary, added_at) VALUES (?, ?, ?, 0, ?)",
-                (project[0], path, Path(path).name, int(time.time())),
+                "INSERT OR IGNORE INTO project_folders (project_id, path, label, is_primary, added_at) VALUES (?, ?, ?, ?, ?)",
+                (project[0], path, Path(path).name, int(make_primary), int(time.time())),
             )
+            if make_primary:
+                db.execute("UPDATE projects SET primary_path = ? WHERE id = ?", (path, project[0]))
         return self.get_project(project_id) or project_from_row(project, self._folder_rows(project[0]))
 
     def remove_folder(self, project_id: str, path: str) -> ProjectSummary:
@@ -125,6 +129,8 @@ class HermesWorkspaceStore:
             raise ValueError("a project must retain at least one folder")
         if path == project[4]:
             raise ValueError("set another primary folder before removing the current primary folder")
+        if path not in {folder[0] for folder in folders}:
+            raise KeyError(path)
         with sqlite3.connect(self.projects_path) as db:
             db.execute("DELETE FROM project_folders WHERE project_id = ? AND path = ?", (project[0], path))
         return self.get_project(project_id) or project_from_row(project, self._folder_rows(project[0]))
@@ -137,12 +143,11 @@ class HermesWorkspaceStore:
         with sqlite3.connect(self.state_path) as db:
             rows = db.execute(
                 "SELECT id, title, source, started_at, ended_at, cwd, parent_session_id, archived "
-                "FROM sessions ORDER BY COALESCE(ended_at, started_at) DESC LIMIT ?",
-                (limit,),
+                "FROM sessions ORDER BY COALESCE(ended_at, started_at) DESC",
             ).fetchall()
         result: list[SessionSummary] = []
         for session_id, title, source, started_at, ended_at, cwd, parent_id, archived in rows:
-            if project and cwd not in folders:
+            if project and not any(_is_within(cwd, folder) for folder in folders):
                 continue
             result.append(SessionSummary(
                 session_id=session_id,
@@ -150,10 +155,12 @@ class HermesWorkspaceStore:
                 source=source,
                 last_active_at=_timestamp(ended_at or started_at),
                 cwd=cwd,
-                project_id=project.project_id if project and cwd in folders else None,
+                project_id=project.project_id if project and any(_is_within(cwd, folder) for folder in folders) else None,
                 parent_session_id=parent_id,
                 archived=bool(archived),
             ))
+            if len(result) >= limit:
+                break
         return result
 
     def list_directories(self, path: str | None = None) -> list[str]:
@@ -201,6 +208,15 @@ class HermesWorkspaceStore:
     @staticmethod
     def _slugify(name: str) -> str:
         return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "project"
+
+
+def _is_within(path: str | None, parent: str) -> bool:
+    if not path:
+        return False
+    try:
+        return Path(path).expanduser().resolve().is_relative_to(Path(parent).expanduser().resolve())
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 def _timestamp(value: float | int | None):

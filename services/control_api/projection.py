@@ -166,8 +166,8 @@ class TaskProjection:
         if self._store is not None:
             self._store.save_task(task)
 
-    def list_projects(self) -> list[ProjectSummary]:
-        workspace_projects = self.workspace.list_projects() if self.workspace is not None else []
+    def list_projects(self, *, include_archived: bool = False) -> list[ProjectSummary]:
+        workspace_projects = self.workspace.list_projects(include_archived=include_archived) if self.workspace is not None else []
         known = {project.project_id: project for project in workspace_projects}
         counts: dict[str, dict[TaskStatus, int]] = defaultdict(lambda: defaultdict(int))
         for task in self._tasks.values():
@@ -189,8 +189,8 @@ class TaskProjection:
             projects.append(ProjectSummary(project_id="default", name="Default"))
         return sorted(projects, key=lambda project: project.name.lower())
 
-    def get_project(self, project_id: str) -> ProjectSummary | None:
-        return next((project for project in self.list_projects() if project.project_id == project_id), None)
+    def get_project(self, project_id: str, *, include_archived: bool = True) -> ProjectSummary | None:
+        return next((project for project in self.list_projects(include_archived=include_archived) if project.project_id == project_id), None)
 
     def list_agents(self) -> list[AgentStatus]:
         return sorted(self._agents.values(), key=lambda agent: agent.agent_id)
