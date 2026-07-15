@@ -98,7 +98,7 @@ export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string
   return (await response.json()) as T;
 }
 
-export async function testConnection(apiUrl: string): Promise<boolean> {
-  const response = await fetch(buildApiUrl(apiUrl, '/health'));
-  return response.ok;
+export async function testConnection(apiUrl: string, apiToken: string): Promise<boolean> {
+  await apiFetch<Diagnostics>(apiUrl, apiToken, '/diagnostics');
+  return true;
 }

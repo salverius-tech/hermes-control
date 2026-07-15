@@ -10,6 +10,10 @@ export function createEventsSocket(apiUrl: string, apiToken: string): WebSocket 
   return new WebSocket(buildWebSocketUrl(apiUrl, apiToken));
 }
 
+export function redactWebSocketUrl(url: string): string {
+  return url.replace(/([?&]token=)[^&]*/i, '$1[REDACTED]');
+}
+
 export function parseLiveEvent(data: string): LiveEvent | null {
   try {
     const event = JSON.parse(data) as LiveEvent;

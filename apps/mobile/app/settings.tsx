@@ -17,7 +17,7 @@ export default function SettingsScreen() {
   const [draftToken, setDraftToken] = useState(apiToken);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const { websocket, lastSync, offline, stale } = useDataStore();
+  const { websocket, websocketUrl, websocketError, websocketCloseCode, websocketCloseReason, lastSync, offline, stale } = useDataStore();
 
   async function saveSettings() {
     setSaveMessage('Saving settings...');
@@ -32,7 +32,7 @@ export default function SettingsScreen() {
 
   async function checkConnection() {
     try {
-      const ok = await testConnection(draftUrl.trim());
+      const ok = await testConnection(draftUrl.trim(), draftToken.trim());
       Alert.alert(ok ? 'Connection OK' : 'Connection failed');
     } catch (err) {
       Alert.alert('Connection failed', err instanceof Error ? err.message : 'Unknown error');
@@ -77,6 +77,9 @@ export default function SettingsScreen() {
       <MetricCard title="Connection state">
         <Text style={styles.help}>Authentication: {draftToken.trim() ? 'configured' : 'not configured'}</Text>
         <Text style={styles.help}>WebSocket: {websocket}</Text>
+        <Text style={styles.help}>WebSocket endpoint: {websocketUrl || 'not configured'}</Text>
+        {websocketError ? <Text style={styles.help}>WebSocket error: {websocketError}</Text> : null}
+        {websocketCloseCode !== null ? <Text style={styles.help}>WebSocket close: {websocketCloseCode}{websocketCloseReason ? ` (${websocketCloseReason})` : ''}</Text> : null}
         <Text style={styles.help}>Last successful sync: {lastSync ? new Date(lastSync).toLocaleString() : 'not yet'}</Text>
         <Text style={styles.help}>Data: {offline || stale ? 'offline/stale' : 'current'}</Text>
       </MetricCard>

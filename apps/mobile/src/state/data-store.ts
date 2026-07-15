@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
 import { apiFetch, AgentStatus, Diagnostics, ProjectSummary, SessionSummary, TaskSummary } from '@/api/client';
-import { createEventsSocket, parseLiveEvent } from '@/api/events';
+import { createEventsSocket, parseLiveEvent, redactWebSocketUrl } from '@/api/events';
+import { buildWebSocketUrl } from '@/api/url';
 import { useSettingsStore } from './settings';
 
 const CACHE_KEY = 'hmc.data.v1';
@@ -16,12 +17,13 @@ async function unreadCount(tasks: TaskSummary[]): Promise<number> { const seen =
 
 type DataState = {
   tasks: TaskSummary[]; projects: ProjectSummary[]; sessions: SessionSummary[]; agents: AgentStatus[]; attention: TaskSummary[]; diagnostics: Diagnostics | null;
-  websocket: 'disconnected' | 'connecting' | 'connected'; lastSync: string | null; stale: boolean; offline: boolean; unreadAttention: number;
+  websocket: 'disconnected' | 'connecting' | 'connected'; websocketUrl: string | null; websocketError: string | null; websocketCloseCode: number | null; websocketCloseReason: string | null;
+  lastSync: string | null; stale: boolean; offline: boolean; unreadAttention: number;
   refresh: () => Promise<void>; connect: () => () => void; markAttentionSeen: (taskId: string) => Promise<void>;
 };
 
 export const useDataStore = create<DataState>((set, get) => ({
-  tasks: [], projects: [], sessions: [], agents: [], attention: [], diagnostics: null, websocket: 'disconnected', lastSync: null, stale: false, offline: false, unreadAttention: 0,
+  tasks: [], projects: [], sessions: [], agents: [], attention: [], diagnostics: null, websocket: 'disconnected', websocketUrl: null, websocketError: null, websocketCloseCode: null, websocketCloseReason: null, lastSync: null, stale: false, offline: false, unreadAttention: 0,
   async refresh() {
     const { apiUrl, apiToken } = useSettingsStore.getState(); if (!apiToken) return;
     try {
@@ -38,8 +40,11 @@ export const useDataStore = create<DataState>((set, get) => ({
   },
   connect() {
     const { apiUrl, apiToken } = useSettingsStore.getState(); if (!apiToken) return () => undefined;
-    set({ websocket: 'connecting' }); const socket = createEventsSocket(apiUrl, apiToken);
-    socket.onopen = () => set({ websocket: 'connected' }); socket.onclose = () => set({ websocket: 'disconnected' }); socket.onerror = () => socket.close();
+    const websocketUrl = redactWebSocketUrl(buildWebSocketUrl(apiUrl, apiToken));
+    set({ websocket: 'connecting', websocketUrl, websocketError: null, websocketCloseCode: null, websocketCloseReason: null }); const socket = createEventsSocket(apiUrl, apiToken);
+    socket.onopen = () => set({ websocket: 'connected', websocketError: null, websocketCloseCode: null, websocketCloseReason: null });
+    socket.onclose = (event) => set({ websocket: 'disconnected', websocketCloseCode: event.code, websocketCloseReason: event.reason || null });
+    socket.onerror = () => { set({ websocketError: 'WebSocket connection error' }); socket.close(); };
     socket.onmessage = (message) => { const event = parseLiveEvent(typeof message.data === 'string' ? message.data : ''); if (!event) return;
       if (event.type === 'snapshot') {
         const attention = attentionItems(event.tasks);
