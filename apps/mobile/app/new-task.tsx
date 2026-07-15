@@ -167,6 +167,18 @@ export default function NewTaskScreen() {
         value={prompt}
       />
 
+      <Pressable
+        disabled={!prompt.trim() || submitting || !apiToken || !projects.some((project) => project.project_id === projectId && !project.archived)}
+        onPress={submit}
+        style={({ pressed }) => [
+          styles.button,
+          (!prompt.trim() || submitting || !apiToken || !projects.some((project) => project.project_id === projectId && !project.archived)) && styles.buttonDisabled,
+          pressed && styles.buttonPressed,
+        ]}
+      >
+        <Text style={styles.buttonText}>{submitting ? 'Submitting…' : 'Start Hermes task'}</Text>
+      </Pressable>
+
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Templates</Text>
         <View style={styles.templateRow}>
@@ -229,17 +241,6 @@ export default function NewTaskScreen() {
       {partialTranscript ? <Text style={styles.partial}>Heard: {partialTranscript}</Text> : null}
       {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
 
-      <Pressable
-        disabled={!prompt.trim() || submitting || !apiToken || !projects.some((project) => project.project_id === projectId && !project.archived)}
-        onPress={submit}
-        style={({ pressed }) => [
-          styles.button,
-          (!prompt.trim() || submitting || !apiToken || !projects.some((project) => project.project_id === projectId && !project.archived)) && styles.buttonDisabled,
-          pressed && styles.buttonPressed,
-        ]}
-      >
-        <Text style={styles.buttonText}>{submitting ? 'Submitting…' : 'Start Hermes task'}</Text>
-      </Pressable>
       {!apiToken ? <Text style={styles.help}>Configure your API token in Settings first.</Text> : null}
       <Text style={styles.help}>Use voice dictation or type directly. Voice transcription stays on-device/OS-level through the phone speech service.</Text>
     </ScrollView>
