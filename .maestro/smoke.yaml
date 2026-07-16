@@ -1,12 +1,14 @@
 appId: com.anonymous.hermesmobilecontrol
 ---
+- clearState
 - launchApp
 - assertVisible: "Hermes Control"
-- assertVisible: "Mobile command center"
-- assertVisible: "Agent status"
-- assertVisible: "Running tasks"
+- assertVisible: "Work inbox"
+- assertVisible: "Needs attention"
+- assertVisible: "Active work"
+- assertVisible: "Hermes agent"
 - assertVisible: "Home"
-- assertVisible: "Tasks"
+- assertVisible: "Attention"
 - assertVisible: "New"
 - assertVisible: "Projects"
 - assertNotVisible: "Start new task"
@@ -18,23 +20,23 @@ appId: com.anonymous.hermesmobilecontrol
 - assertVisible: "Instruction"
 - assertVisible: "Speak prompt"
 - tapOn:
-    id: "nav-tasks"
-- assertVisible: "Tasks"
-- assertVisible: "No tasks yet."
+    id: "nav-attention"
+- assertVisible: "Needs attention"
+- assertVisible: "Open items"
 - tapOn:
     id: "nav-projects"
 - assertVisible: "Projects"
-- assertVisible: "No projects loaded."
+- assertVisible: "Workspaces"
 - tapOn:
     id: "nav-home"
 - assertVisible: "Hermes Control"
-- assertVisible: "Mobile command center"
+- assertVisible: "Work inbox"
 - tapOn:
     id: "header-settings"
 - assertVisible: "Settings"
 - assertVisible: "Control API URL"
 - assertVisible: "API token"
-- tapOn:
-    id: "nav-home"
-- assertVisible: "Hermes Control"
-- assertVisible: "Mobile command center"
+- tapOn: "Diagnostics"
+- scroll
+- assertVisible:
+    id: "settings-load-diagnostics"
