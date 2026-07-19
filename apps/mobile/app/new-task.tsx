@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, TaskSummary } from '@/api/client';
@@ -32,6 +32,7 @@ export default function NewTaskScreen() {
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const skipNextDraftSave = useRef(false);
@@ -134,10 +135,11 @@ export default function NewTaskScreen() {
 
   async function submit() {
     if (!prompt.trim()) return;
+    const request = buildTaskCreateRequest({ prompt, projectId, priority, requiresApproval });
+    const idempotencyKey = `mobile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
-      setSubmitting(true);
-      const request = buildTaskCreateRequest({ prompt, projectId, priority, requiresApproval });
-      const idempotencyKey = `mobile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      setSubmitting(true); setSubmissionError(null);
+      setQueueNotice(null);
       const task = await apiFetch<TaskSummary>(apiUrl, apiToken, '/tasks', {
         method: 'POST',
         headers: { 'Idempotency-Key': idempotencyKey },
@@ -153,11 +155,15 @@ export default function NewTaskScreen() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       if (!message.startsWith('API ')) {
-        await enqueueTask(AsyncStorage, request, new Date(), idempotencyKey);
-        setQueueNotice('API unavailable. Task saved locally and will retry when the connection returns.');
+        try {
+          await enqueueTask(AsyncStorage, request, new Date(), idempotencyKey);
+          setQueueNotice('API unavailable. Task saved locally and will retry when the connection returns.');
+        } catch (queueError) {
+          setSubmissionError(queueError instanceof Error ? queueError.message : 'Task submission failed');
+        }
         return;
       }
-      Alert.alert('Task failed', message);
+      setSubmissionError(err instanceof Error ? err.message : 'Task submission failed');
     } finally {
       setSubmitting(false);
     }
@@ -180,6 +186,8 @@ export default function NewTaskScreen() {
       </View>
 
       <TextInput
+        accessibilityLabel="Task instruction"
+        accessibilityHint="Describe the work Hermes should perform"
         multiline
         onChangeText={setPrompt}
         placeholder="Tell Hermes what to do..."
@@ -222,7 +230,7 @@ export default function NewTaskScreen() {
         <Text style={styles.label}>Project</Text>
         <Text style={styles.selectedProject}>{projects.find((project) => project.project_id === projectId)?.name || projectId}</Text>
         <Text style={styles.help}>{projects.find((project) => project.project_id === projectId)?.primary_folder || 'Select an active Hermes project.'}</Text>
-        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
+        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable accessibilityRole="button" accessibilityState={{ selected: project.project_id === projectId }} key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
         {projects.length > 0 && projects.every((project) => project.archived) ? <Text style={styles.error}>All projects are archived. Restore one before creating work.</Text> : null}
       </View>
 
@@ -233,6 +241,8 @@ export default function NewTaskScreen() {
             const selected = priority === option.value;
             return (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
                 key={option.value}
                 onPress={() => setPriority(option.value)}
                 style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && styles.buttonPressed]}
@@ -263,6 +273,7 @@ export default function NewTaskScreen() {
       {partialTranscript ? <Text style={styles.partial}>Heard: {partialTranscript}</Text> : null}
       {voiceError ? <Text style={styles.error}>{voiceError}</Text> : null}
       {queueNotice ? <Text style={styles.help}>{queueNotice}</Text> : null}
+      {submissionError ? <Text accessibilityLiveRegion="polite" style={styles.error}>Task submission failed: {submissionError}</Text> : null}
 
       {!apiToken ? <Text style={styles.help}>Configure your API token in Settings first.</Text> : null}
       <Text style={styles.help}>Use voice dictation or type directly. Voice transcription stays on-device/OS-level through the phone speech service.</Text>

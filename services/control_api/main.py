@@ -116,8 +116,8 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/tasks", dependencies=[Depends(require_auth)])
-    def list_tasks() -> list[TaskSummary]:
-        return projection.list_tasks()
+    def list_tasks(include_archived: bool = False) -> list[TaskSummary]:
+        return projection.list_tasks(include_archived=include_archived)
 
     @app.post("/tasks", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
     async def create_task(request: TaskCreateRequest, idempotency_key: str | None = Header(default=None)) -> TaskSummary:
@@ -170,6 +170,25 @@ def create_app() -> FastAPI:
             return await task_service.cancel_task(task_id, on_update=broadcast_task_update)
         except TaskStateError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    @app.post("/tasks/{task_id}/archive", dependencies=[Depends(require_auth)])
+    async def archive_task(task_id: str) -> TaskSummary:
+        if projection.get_task(task_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        try:
+            task = projection.archive_task(task_id)
+        except ValueError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        await connections.broadcast_task_updated(task)
+        return task
+
+    @app.post("/tasks/{task_id}/restore", dependencies=[Depends(require_auth)])
+    async def restore_task(task_id: str) -> TaskSummary:
+        if projection.get_task(task_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        task = projection.restore_task(task_id)
+        await connections.broadcast_task_updated(task)
+        return task
 
     @app.post("/tasks/{task_id}/retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
     async def retry_task(task_id: str) -> TaskSummary:
@@ -345,7 +364,7 @@ def create_app() -> FastAPI:
         try:
             await connections.send_snapshot(
                 websocket,
-                tasks=projection.list_tasks(),
+                tasks=projection.list_tasks(include_archived=True),
                 projects=projection.list_projects(),
                 agents=projection.list_agents(),
             )

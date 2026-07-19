@@ -35,7 +35,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       await flushTaskQueue(AsyncStorage, apiUrl, apiToken);
       const queuedTasks = await loadTaskQueue(AsyncStorage);
       const [tasks, projects, sessions, agents, diagnostics] = await Promise.all([
-        apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks'), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
+        apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks?include_archived=true'), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
         apiFetch<SessionSummary[]>(apiUrl, apiToken, '/sessions'), apiFetch<AgentStatus[]>(apiUrl, apiToken, '/agents'), apiFetch<Diagnostics>(apiUrl, apiToken, '/diagnostics'),
       ]);
       const attention = attentionItems(tasks);
@@ -74,7 +74,8 @@ export const useDataStore = create<DataState>((set, get) => ({
           set({ tasks: event.tasks, projects: event.projects, agents: event.agents, attention, stale: false, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: false });
           void unreadCount(event.tasks).then((unreadAttention) => set({ unreadAttention }));
         } else {
-          const expected = get().lastEventSequence === null ? event.seq : get().lastEventSequence + 1;
+          const lastEventSequence = get().lastEventSequence;
+          const expected = lastEventSequence === null ? event.seq : lastEventSequence + 1;
           const gap = event.seq !== expected;
           set((state) => { const tasks = mergeTask(state.tasks, event.task); return { tasks, attention: attentionItems(tasks), stale: gap, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: gap }; });
           if (gap) void get().refresh();

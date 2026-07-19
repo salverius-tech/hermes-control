@@ -1,5 +1,6 @@
 appId: com.anonymous.hermesmobilecontrol
 ---
+- clearState
 - launchApp
 - tapOn:
     id: "nav-new"

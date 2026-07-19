@@ -78,7 +78,6 @@ export default function ProjectManageScreen() {
   }
 
   return <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
-    <Text style={styles.title}>{editing ? 'Manage project' : 'New Hermes project'}</Text>
     {error ? <Text style={styles.error}>{error}</Text> : null}
     <Text style={styles.label}>Name</Text><TextInput onChangeText={setName} style={styles.input} value={name} />
     <Text style={styles.label}>Description</Text><TextInput multiline onChangeText={setDescription} style={[styles.input, styles.multiline]} value={description} />
@@ -114,5 +113,4 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 100, textAlignVertical: 'top' },
   primary: { color: colors.success, fontSize: 12, fontWeight: '800' },
   remove: { color: colors.danger, fontSize: 12, fontWeight: '800' },
-  title: { color: colors.text, fontSize: 28, fontWeight: '900' },
 });

@@ -52,3 +52,16 @@ def test_sqlite_task_store_tracks_schema_version(tmp_path):
         version = connection.execute("SELECT version FROM schema_migrations WHERE name = ?", ("control_api",)).fetchone()
 
     assert version == (store.schema_version,)
+
+
+def test_sqlite_task_store_reloads_archived_task(tmp_path):
+    db_path = tmp_path / "tasks.db"
+    first_projection = TaskProjection(store=SQLiteTaskStore(db_path))
+    task = first_projection.create_task(TaskCreateRequest(prompt="Persist archived task"))
+    first_projection.update_task(task.task_id, status=TaskStatus.COMPLETED)
+    first_projection.archive_task(task.task_id)
+
+    reloaded = TaskProjection(store=SQLiteTaskStore(db_path)).get_task(task.task_id)
+
+    assert reloaded is not None
+    assert reloaded.archived_at is not None

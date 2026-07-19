@@ -52,3 +52,32 @@ def test_projection_returns_default_agent_status():
     assert len(agents) == 1
     assert agents[0].agent_id == "hermes-agent"
     assert agents[0].status == "offline"
+
+
+def test_projection_archives_terminal_task_and_hides_it_from_default_list():
+    projection = TaskProjection()
+    task = projection.create_task(TaskCreateRequest(prompt="Archive this completed task"))
+    projection.update_task(task.task_id, status=TaskStatus.COMPLETED)
+
+    archived = projection.archive_task(task.task_id)
+
+    assert archived.archived_at is not None
+    assert projection.list_tasks() == []
+    assert [task.task_id for task in projection.list_tasks(include_archived=True)] == [task.task_id]
+    assert projection.list_task_events(task.task_id)[-1].event_type == "task.archived"
+
+
+def test_projection_rejects_archiving_active_task_and_can_restore_archived_task():
+    projection = TaskProjection()
+    task = projection.create_task(TaskCreateRequest(prompt="Keep this queued task visible"))
+
+    with pytest.raises(ValueError, match="terminal"):
+        projection.archive_task(task.task_id)
+
+    projection.update_task(task.task_id, status=TaskStatus.CANCELED)
+    projection.archive_task(task.task_id)
+    restored = projection.restore_task(task.task_id)
+
+    assert restored.archived_at is None
+    assert projection.list_tasks()[0].task_id == task.task_id
+    assert projection.list_task_events(task.task_id)[-1].event_type == "task.restored"

@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
@@ -12,12 +12,15 @@ import { MetadataRow } from '@/components/MetadataRow';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { StatusPill } from '@/components/StatusPill';
 import { useSettingsStore } from '@/state/settings';
+import { useDataStore } from '@/state/data-store';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function TaskDetailScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
   const { apiUrl, apiToken } = useSettingsStore();
+  const offline = useDataStore((state) => state.offline);
+  const stale = useDataStore((state) => state.stale);
   const insets = useSafeAreaInsets();
   const [task, setTask] = useState<TaskSummary | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
@@ -28,6 +31,7 @@ export default function TaskDetailScreen() {
   const [guidance, setGuidance] = useState('');
   const [editingRetry, setEditingRetry] = useState(false);
   const [continuationMode, setContinuationMode] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -72,6 +76,7 @@ export default function TaskDetailScreen() {
   }
 
   async function runTaskAction(path: string, failureMessage: string) {
+    if (offline || stale) { setError('Reconnect before changing task state.'); return; }
     try {
       setActionPending(true);
       setError(null);
@@ -118,6 +123,7 @@ export default function TaskDetailScreen() {
 
   async function retryUnchanged() {
     if (!task) return;
+    if (offline || stale) { setError('Reconnect before changing task state.'); return; }
     try {
       setActionPending(true); setError(null);
       const next = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${task.task_id}/retry`, { method: 'POST' });
@@ -126,15 +132,37 @@ export default function TaskDetailScreen() {
     finally { setActionPending(false); }
   }
 
+  function confirmArchive() {
+    if (!task) return;
+    const restoring = Boolean(task.archived_at);
+    Alert.alert(restoring ? 'Restore task?' : 'Remove from inbox?', restoring ? 'This task will return to your task lists.' : 'The task and its event history will be retained in Archived.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: restoring ? 'Restore' : 'Remove', style: restoring ? 'default' : 'destructive', onPress: () => void archiveTask(restoring) },
+    ]);
+  }
+
+  async function archiveTask(restoring: boolean) {
+    if (!task || offline || stale) { setError('Reconnect before changing task state.'); return; }
+    try {
+      setActionPending(true); setError(null);
+      const updated = await apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${task.task_id}/${restoring ? 'restore' : 'archive'}`, { method: 'POST' });
+      if (restoring) { setActionMessage('Task restored to your inbox.'); await refreshTaskCache(updated); }
+      else router.replace('/tasks');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to update task visibility'); }
+    finally { setActionPending(false); }
+  }
+
   const canApprove = task?.status === 'awaiting_approval';
   const canRecover = task?.status === 'failed' || task?.status === 'blocked' || task?.status === 'completed';
   const canCancel = task?.status === 'queued' || task?.status === 'running' || task?.status === 'awaiting_approval';
+  const canArchive = task && !canCancel && !['awaiting_approval', 'queued', 'running'].includes(task.status);
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}> 
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
       {cacheNotice ? <Text style={styles.muted}>{cacheNotice}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {actionMessage ? <Text accessibilityLiveRegion="polite" style={styles.success}>{actionMessage}</Text> : null}
       {task ? (
         <>
           <MetricCard title={task.title}>
@@ -199,6 +227,7 @@ export default function TaskDetailScreen() {
                   </Pressable>
                 </>
               ) : null}
+              {canArchive ? <Pressable accessibilityRole="button" disabled={actionPending || offline || stale} onPress={confirmArchive} style={[styles.archiveButton, (actionPending || offline || stale) && styles.disabledButton]} testID="task-archive"><Text style={styles.archiveButtonText}>{task.archived_at ? 'Restore to inbox' : 'Remove from inbox'}</Text></Pressable> : null}
             </View>
           </MetricCard>
 
@@ -211,7 +240,7 @@ export default function TaskDetailScreen() {
 
           {editingRetry ? (
             <MetricCard title={continuationMode ? 'Continue Hermes session' : 'Edit before retry'} subtitle="The original task remains unchanged; this creates a linked task.">
-              <TextInput multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
+              <TextInput accessibilityLabel="Retry guidance" accessibilityHint="Add guidance or revise the instruction" multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
               <Pressable disabled={actionPending || !guidance.trim()} onPress={submitEditedRetry} style={[styles.button, (!guidance.trim() || actionPending) && styles.disabledButton]} testID="task-submit-edited-retry"><Text style={styles.buttonText}>{continuationMode ? 'Send guidance' : 'Submit edited retry'}</Text></Pressable>
             </MetricCard>
           ) : null}
@@ -246,6 +275,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.md,
   },
+  archiveButton: { borderColor: colors.danger, borderRadius: 12, borderWidth: 1, minWidth: 132, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  archiveButtonText: { color: colors.danger, fontSize: 15, fontWeight: '800', textAlign: 'center' },
   bodyText: {
     color: colors.text,
     fontSize: 15,
@@ -321,4 +352,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  success: { color: colors.success, fontWeight: '800' },
 });

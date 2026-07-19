@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, Diagnostics, testConnection } from '@/api/client';
@@ -24,21 +24,20 @@ export default function SettingsScreen() {
   async function saveSettings() {
     setSaveMessage('Saving settings...');
     try { await save({ apiUrl: draftUrl.trim(), apiToken: draftToken.trim() }); setSaveMessage('Settings saved'); }
-    catch (err) { setSaveMessage('Settings failed'); Alert.alert('Settings failed', err instanceof Error ? err.message : 'Unknown error'); }
+    catch (err) { setSaveMessage(err instanceof Error ? `Settings failed: ${err.message}` : 'Settings failed'); }
   }
 
   async function checkConnection() {
-    try { await testConnection(draftUrl.trim(), draftToken.trim()); Alert.alert('Connection OK'); }
-    catch (err) { Alert.alert('Connection failed', err instanceof Error ? err.message : 'Unknown error'); }
+    try { await testConnection(draftUrl.trim(), draftToken.trim()); setSaveMessage('Connection OK'); }
+    catch (err) { setSaveMessage(err instanceof Error ? `Connection failed: ${err.message}` : 'Connection failed'); }
   }
 
   async function loadDiagnostics() {
-    try { setDiagnostics(await apiFetch<Diagnostics>(draftUrl.trim(), draftToken.trim(), '/diagnostics')); }
-    catch (err) { Alert.alert('Diagnostics failed', err instanceof Error ? err.message : 'Unknown error'); }
+    try { setDiagnostics(await apiFetch<Diagnostics>(draftUrl.trim(), draftToken.trim(), '/diagnostics')); setSaveMessage('Diagnostics loaded'); }
+    catch (err) { setSaveMessage(err instanceof Error ? `Diagnostics failed: ${err.message}` : 'Diagnostics failed'); }
   }
 
   return <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-    <Text style={styles.title}>Settings</Text>
     <Text style={styles.intro}>Keep the connection details here; technical state stays below the actions.</Text>
 
     <MetricCard title="Connection">
@@ -69,4 +68,4 @@ export default function SettingsScreen() {
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ container: { gap: spacing.md, padding: spacing.lg }, error: { color: colors.danger, fontSize: 13, lineHeight: 19 }, help: { color: colors.muted, fontSize: 13, lineHeight: 19 }, input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, minHeight: 48, paddingHorizontal: spacing.md }, intro: { color: colors.muted, fontSize: 14, lineHeight: 20 }, label: { color: colors.muted, fontSize: 12, fontWeight: '800', marginBottom: -spacing.xs, textTransform: 'uppercase' }, success: { color: colors.success, fontSize: 13, fontWeight: '800' }, title: { color: colors.text, fontSize: 30, fontWeight: '900' } });
+const styles = StyleSheet.create({ container: { gap: spacing.md, padding: spacing.lg }, error: { color: colors.danger, fontSize: 13, lineHeight: 19 }, help: { color: colors.muted, fontSize: 13, lineHeight: 19 }, input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, minHeight: 48, paddingHorizontal: spacing.md }, intro: { color: colors.muted, fontSize: 14, lineHeight: 20 }, label: { color: colors.muted, fontSize: 12, fontWeight: '800', marginBottom: -spacing.xs, textTransform: 'uppercase' }, success: { color: colors.success, fontSize: 13, fontWeight: '800' } });

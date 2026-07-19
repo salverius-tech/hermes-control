@@ -49,8 +49,6 @@ export default function ProjectDetailScreen() {
     return () => { mounted = false; };
   }, [apiToken, apiUrl, decodedProjectId]);
 
-  const attention = tasks.filter(taskNeedsAttention);
-  const active = tasks.filter((task) => task.status === 'running' || task.status === 'queued');
   const grouped = useMemo(() => {
     const groups = new Map<string, TaskSummary[]>();
     for (const task of tasks) {
@@ -75,23 +73,15 @@ export default function ProjectDetailScreen() {
           <Link href={{ pathname: '/new-task', params: { projectId: project.project_id } }} asChild>
             <Pressable style={styles.primaryButton}><Text style={styles.primaryButtonText}>Start task in this project</Text></Pressable>
           </Link>
-          <Section title="Needs attention" count={attention.length} attention>
-            {attention.map((task) => <TaskRow key={task.task_id} task={task} />)}
-            {!attention.length ? <Text style={styles.muted}>Nothing needs your input.</Text> : null}
-          </Section>
-          <Section title="Active work" count={active.length}>
-            {active.map((task) => <TaskRow key={task.task_id} task={task} />)}
-            {!active.length ? <Text style={styles.muted}>No active tasks.</Text> : null}
-          </Section>
           <Section title="Work threads" count={grouped.length}>
             {grouped.map((group) => <ThreadCard key={group[0].root_task_id || group[0].session_id || group[0].task_id} tasks={group} />)}
             {!grouped.length ? <Text style={styles.muted}>No task history in this project.</Text> : null}
           </Section>
-          <Section title="Hermes sessions" count={sessions.length}>
-            {sessions.slice(0, 10).map((session) => (
-              <View key={session.session_id} style={styles.session}><Text style={styles.sessionTitle}>{session.title || 'Untitled session'}</Text><Text style={styles.muted}>{session.session_id}</Text></View>
+          {sessions.length ? <Section title="Hermes sessions" count={sessions.length}>
+            {sessions.slice(0, 5).map((session) => (
+              <View key={session.session_id} style={styles.session}><Text style={styles.sessionTitle}>{session.title || 'Untitled session'}</Text><Text style={styles.muted} numberOfLines={1}>{session.preview || 'No session preview available'}</Text></View>
             ))}
-          </Section>
+          </Section> : null}
         </>
       ) : null}
     </ScrollView>

@@ -62,3 +62,18 @@ def test_websocket_broadcasts_task_created(monkeypatch):
     assert message["type"] == "task.created"
     assert message["seq"] == 1
     assert message["task"]["prompt"] == "Broadcast this task"
+
+
+def test_websocket_snapshot_includes_archived_tasks_for_task_history(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer dev-token"}
+    created = client.post("/tasks", headers=headers, json={"prompt": "Keep archived history available"}).json()
+    client.post(f"/tasks/{created['task_id']}/cancel", headers=headers)
+    client.post(f"/tasks/{created['task_id']}/archive", headers=headers)
+
+    with client.websocket_connect("/ws/events?token=dev-token") as websocket:
+        message = websocket.receive_json()
+
+    assert [task["task_id"] for task in message["tasks"]] == [created["task_id"]]
+    assert message["tasks"][0]["archived_at"] is not None

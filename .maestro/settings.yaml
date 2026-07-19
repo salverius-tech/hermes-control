@@ -1,5 +1,6 @@
 appId: com.anonymous.hermesmobilecontrol
 ---
+- clearState
 - launchApp
 - tapOn:
     id: "header-settings"
@@ -12,8 +13,6 @@ appId: com.anonymous.hermesmobilecontrol
     id: "settings-save"
 - assertVisible:
     id: "settings-test-connection"
-- assertVisible:
-    id: "settings-load-diagnostics"
 - tapOn:
     id: "settings-api-url"
 - eraseText
@@ -27,6 +26,8 @@ appId: com.anonymous.hermesmobilecontrol
 - assertVisible:
     id: "settings-save-message"
 - hideKeyboard
-- tapOn:
-    id: "nav-home"
-- assertVisible: "Hermes Control"
+- scroll
+- tapOn: "Diagnostics"
+- scroll
+- assertVisible:
+    id: "settings-load-diagnostics"

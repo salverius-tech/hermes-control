@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -11,7 +13,7 @@ pytestmark = pytest.mark.integration
 def test_diagnostics_reports_backend_storage_and_execution_mode(monkeypatch, tmp_path):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     monkeypatch.setenv("CONTROL_API_DB_PATH", str(tmp_path / "tasks.db"))
-    monkeypatch.setenv("CONTROL_API_HERMES_COMMAND", "/bin/true")
+    monkeypatch.setenv("CONTROL_API_HERMES_COMMAND", sys.executable)
     monkeypatch.setenv("CONTROL_API_DISCORD_WEBHOOK_URL", "https://discord.example/webhook")
     client = TestClient(create_app())
 
