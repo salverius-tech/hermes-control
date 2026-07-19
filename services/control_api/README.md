@@ -12,9 +12,11 @@ CONTROL_API_TOKEN=dev-token CONTROL_API_DB_PATH=./data/control-api.db uvicorn se
 ## Endpoints
 
 - `GET /health` — unauthenticated health check.
-- `GET /tasks` — list tasks.
+- `GET /tasks?include_archived=true` — list tasks, optionally including archived history.
 - `POST /tasks` — create a queued Hermes task shell.
 - `GET /tasks/{task_id}` — task detail.
+- `POST /tasks/{task_id}/archive` — remove a terminal task from active task lists while retaining its history.
+- `POST /tasks/{task_id}/restore` — restore an archived task to task lists.
 - `GET /projects` — project summaries.
 - `GET /agents` — agent statuses.
 - `WS /ws/events?token=...` — initial snapshot and live task events.
@@ -22,8 +24,10 @@ CONTROL_API_TOKEN=dev-token CONTROL_API_DB_PATH=./data/control-api.db uvicorn se
 All endpoints except `/health` require:
 
 ```text
-Authorization: Bearer <CONTROL_API_TOKEN>
+Authorization: Bearer <CONTR...KEN>
 ```
+
+Only completed, failed, canceled, rejected, or blocked tasks can be archived. Archiving is reversible and retains the task timeline.
 
 ## Current integration boundary
 

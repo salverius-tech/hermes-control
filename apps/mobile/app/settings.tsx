@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, Diagnostics, testConnection } from '@/api/client';
@@ -24,17 +24,17 @@ export default function SettingsScreen() {
   async function saveSettings() {
     setSaveMessage('Saving settings...');
     try { await save({ apiUrl: draftUrl.trim(), apiToken: draftToken.trim() }); setSaveMessage('Settings saved'); }
-    catch (err) { setSaveMessage('Settings failed'); Alert.alert('Settings failed', err instanceof Error ? err.message : 'Unknown error'); }
+    catch (err) { setSaveMessage(err instanceof Error ? `Settings failed: ${err.message}` : 'Settings failed'); }
   }
 
   async function checkConnection() {
-    try { await testConnection(draftUrl.trim(), draftToken.trim()); Alert.alert('Connection OK'); }
-    catch (err) { Alert.alert('Connection failed', err instanceof Error ? err.message : 'Unknown error'); }
+    try { await testConnection(draftUrl.trim(), draftToken.trim()); setSaveMessage('Connection OK'); }
+    catch (err) { setSaveMessage(err instanceof Error ? `Connection failed: ${err.message}` : 'Connection failed'); }
   }
 
   async function loadDiagnostics() {
-    try { setDiagnostics(await apiFetch<Diagnostics>(draftUrl.trim(), draftToken.trim(), '/diagnostics')); }
-    catch (err) { Alert.alert('Diagnostics failed', err instanceof Error ? err.message : 'Unknown error'); }
+    try { setDiagnostics(await apiFetch<Diagnostics>(draftUrl.trim(), draftToken.trim(), '/diagnostics')); setSaveMessage('Diagnostics loaded'); }
+    catch (err) { setSaveMessage(err instanceof Error ? `Diagnostics failed: ${err.message}` : 'Diagnostics failed'); }
   }
 
   return <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
