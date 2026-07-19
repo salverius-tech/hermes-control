@@ -74,7 +74,8 @@ export const useDataStore = create<DataState>((set, get) => ({
           set({ tasks: event.tasks, projects: event.projects, agents: event.agents, attention, stale: false, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: false });
           void unreadCount(event.tasks).then((unreadAttention) => set({ unreadAttention }));
         } else {
-          const expected = get().lastEventSequence === null ? event.seq : get().lastEventSequence + 1;
+          const lastEventSequence = get().lastEventSequence;
+          const expected = lastEventSequence === null ? event.seq : lastEventSequence + 1;
           const gap = event.seq !== expected;
           set((state) => { const tasks = mergeTask(state.tasks, event.task); return { tasks, attention: attentionItems(tasks), stale: gap, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: gap }; });
           if (gap) void get().refresh();
