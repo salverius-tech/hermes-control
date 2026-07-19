@@ -240,7 +240,7 @@ export default function TaskDetailScreen() {
 
           {editingRetry ? (
             <MetricCard title={continuationMode ? 'Continue Hermes session' : 'Edit before retry'} subtitle="The original task remains unchanged; this creates a linked task.">
-              <TextInput multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
+              <TextInput accessibilityLabel="Retry guidance" accessibilityHint="Add guidance or revise the instruction" multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
               <Pressable disabled={actionPending || !guidance.trim()} onPress={submitEditedRetry} style={[styles.button, (!guidance.trim() || actionPending) && styles.disabledButton]} testID="task-submit-edited-retry"><Text style={styles.buttonText}>{continuationMode ? 'Send guidance' : 'Submit edited retry'}</Text></Pressable>
             </MetricCard>
           ) : null}

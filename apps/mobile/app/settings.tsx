@@ -38,7 +38,6 @@ export default function SettingsScreen() {
   }
 
   return <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-    <Text style={styles.title}>Settings</Text>
     <Text style={styles.intro}>Keep the connection details here; technical state stays below the actions.</Text>
 
     <MetricCard title="Connection">
@@ -69,4 +68,4 @@ export default function SettingsScreen() {
   </ScrollView>;
 }
 
-const styles = StyleSheet.create({ container: { gap: spacing.md, padding: spacing.lg }, error: { color: colors.danger, fontSize: 13, lineHeight: 19 }, help: { color: colors.muted, fontSize: 13, lineHeight: 19 }, input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, minHeight: 48, paddingHorizontal: spacing.md }, intro: { color: colors.muted, fontSize: 14, lineHeight: 20 }, label: { color: colors.muted, fontSize: 12, fontWeight: '800', marginBottom: -spacing.xs, textTransform: 'uppercase' }, success: { color: colors.success, fontSize: 13, fontWeight: '800' }, title: { color: colors.text, fontSize: 30, fontWeight: '900' } });
+const styles = StyleSheet.create({ container: { gap: spacing.md, padding: spacing.lg }, error: { color: colors.danger, fontSize: 13, lineHeight: 19 }, help: { color: colors.muted, fontSize: 13, lineHeight: 19 }, input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, minHeight: 48, paddingHorizontal: spacing.md }, intro: { color: colors.muted, fontSize: 14, lineHeight: 20 }, label: { color: colors.muted, fontSize: 12, fontWeight: '800', marginBottom: -spacing.xs, textTransform: 'uppercase' }, success: { color: colors.success, fontSize: 13, fontWeight: '800' } });

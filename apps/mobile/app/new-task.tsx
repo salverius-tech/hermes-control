@@ -180,6 +180,8 @@ export default function NewTaskScreen() {
       </View>
 
       <TextInput
+        accessibilityLabel="Task instruction"
+        accessibilityHint="Describe the work Hermes should perform"
         multiline
         onChangeText={setPrompt}
         placeholder="Tell Hermes what to do..."
@@ -222,7 +224,7 @@ export default function NewTaskScreen() {
         <Text style={styles.label}>Project</Text>
         <Text style={styles.selectedProject}>{projects.find((project) => project.project_id === projectId)?.name || projectId}</Text>
         <Text style={styles.help}>{projects.find((project) => project.project_id === projectId)?.primary_folder || 'Select an active Hermes project.'}</Text>
-        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
+        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable accessibilityRole="button" accessibilityState={{ selected: project.project_id === projectId }} key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
         {projects.length > 0 && projects.every((project) => project.archived) ? <Text style={styles.error}>All projects are archived. Restore one before creating work.</Text> : null}
       </View>
 
@@ -233,6 +235,8 @@ export default function NewTaskScreen() {
             const selected = priority === option.value;
             return (
               <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
                 key={option.value}
                 onPress={() => setPriority(option.value)}
                 style={({ pressed }) => [styles.segment, selected && styles.segmentSelected, pressed && styles.buttonPressed]}
