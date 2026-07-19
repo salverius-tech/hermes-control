@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaskSummary } from '@/api/client';
 import { EmptyState } from '@/components/EmptyState';
-import { MetricCard } from '@/components/MetricCard';
 import { MetadataRow } from '@/components/MetadataRow';
 import { SectionHeader } from '@/components/SectionHeader';
 import { StatusPill } from '@/components/StatusPill';
@@ -14,11 +13,10 @@ import { colors, spacing } from '@/theme/tokens';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const { tasks, projects, agents, diagnostics, websocket, offline, lastSync } = useDataStore();
+  const { tasks, projects, websocket, offline, lastSync } = useDataStore();
 
   const attention = tasks.filter((task) => ['awaiting_approval', 'failed', 'blocked'].includes(task.status));
   const running = tasks.filter((task) => task.status === 'running' || task.status === 'queued');
-  const agent = agents[0];
   const connectionStatus = offline || websocket === 'disconnected' ? 'offline' : websocket === 'connected' ? 'busy' : 'idle';
 
   return (
@@ -31,14 +29,6 @@ export default function DashboardScreen() {
       {offline ? <Text style={styles.warning}>Showing the last available state. Reconnect to reconcile.</Text> : null}
       {!lastSync && !offline ? <ActivityIndicator color={colors.primary} /> : null}
 
-      <View style={styles.grid}>
-        <MetricCard title="Needs attention" subtitle="Approval, blocker, or failure"><Text style={[styles.metric, attention.length > 0 && styles.warningText]}>{attention.length}</Text></MetricCard>
-        <MetricCard title="Active work" subtitle="Queued or running"><Text style={styles.metric}>{running.length}</Text></MetricCard>
-      </View>
-
-      <MetricCard title="Hermes agent" subtitle={diagnostics?.execution_mode ? `Execution · ${diagnostics.execution_mode}` : 'Connection not configured'}>
-        <View style={styles.agentRow}><StatusPill status={agent?.status || (offline ? 'offline' : 'idle')} /><Text style={styles.muted}>{websocket === 'connected' ? 'Live updates on' : 'Live updates off'}</Text></View>
-      </MetricCard>
 
       <View style={styles.section}><SectionHeader actionHref="/attention" actionLabel="View all" count={attention.length} title="Needs attention" />
         {attention.slice(0, 3).map((task) => <TaskRow key={task.task_id} task={task} />)}
@@ -63,14 +53,11 @@ function TaskRow({ task }: { task: TaskSummary }) {
 }
 
 const styles = StyleSheet.create({
-  agentRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   chevron: { color: colors.primary, fontSize: 28, fontWeight: '300' },
   container: { gap: spacing.lg, padding: spacing.lg },
   eyebrow: { color: colors.primary, fontSize: 11, fontWeight: '900', letterSpacing: 1.5 },
-  grid: { flexDirection: 'row', gap: spacing.sm },
   hero: { backgroundColor: colors.elevated, borderRadius: 22, gap: spacing.sm, padding: spacing.lg },
   heroTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  metric: { color: colors.text, fontSize: 36, fontWeight: '900' },
   muted: { color: colors.muted, fontSize: 13, lineHeight: 19 },
   pressed: { opacity: 0.75 },
   project: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 16, flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between', padding: spacing.md },
@@ -83,5 +70,4 @@ const styles = StyleSheet.create({
   taskTop: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
   title: { color: colors.text, fontSize: 30, fontWeight: '900', letterSpacing: -0.5 },
   warning: { color: colors.warning, fontSize: 13, fontWeight: '800' },
-  warningText: { color: colors.warning },
 });
