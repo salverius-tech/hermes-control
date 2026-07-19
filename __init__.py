@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import threading
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -134,6 +135,10 @@ def _run_bridge() -> None:
         _logger.exception("Hermes Control Extension bridge failed to start at %s", socket_path)
 
 
+def _is_gateway_process() -> bool:
+    return sys.argv[-2:] == ["gateway", "run"]
+
+
 def _start_bridge() -> None:
     global _bridge_thread
     if _bridge_thread is not None and _bridge_thread.is_alive():
@@ -157,4 +162,7 @@ def register(ctx) -> None:
         description="Read the local Hermes Control API.",
         emoji="📱",
     )
-    _start_bridge()
+    if _is_gateway_process():
+        _start_bridge()
+    else:
+        _logger.debug("Hermes Control Extension bridge not started outside the gateway process")

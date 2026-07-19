@@ -26,13 +26,29 @@ systemctl restart "${SERVICE_NAME}"
 
 socket_path="/run/hermes/control-extension.sock"
 for _ in {1..50}; do
-  if [[ -S "${socket_path}" ]]; then
+  if python3 - "${socket_path}" <<'PY'
+import asyncio
+import sys
+
+
+async def main() -> None:
+    try:
+        _reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(sys.argv[1]), timeout=1)
+    except OSError:
+        raise SystemExit(1) from None
+    writer.close()
+    await writer.wait_closed()
+
+
+asyncio.run(main())
+PY
+  then
     printf 'Hermes Control Extension runtime ready: %s (gateway user: %s)\n' "${socket_path}" "${service_user}"
     exit 0
   fi
   sleep 0.1
 done
 
-echo "Gateway restarted, but ${socket_path} was not created" >&2
+echo "Gateway restarted, but ${socket_path} did not accept connections" >&2
 echo "Check: journalctl -u ${SERVICE_NAME} -n 100 --no-pager" >&2
 exit 1
