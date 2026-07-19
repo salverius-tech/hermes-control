@@ -48,13 +48,14 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" options={{ ...defaultScreenOptions, title: 'Hermes Control' }} />
-        <Stack.Screen name="attention" options={{ title: 'Needs Attention' }} />
+        <Stack.Screen name="tasks/index" options={{ ...defaultScreenOptions, title: 'Tasks' }} />
+        <Stack.Screen name="attention" options={{ ...defaultScreenOptions, title: 'Needs Attention' }} />
         <Stack.Screen name="tasks/[taskId]" options={{ title: 'Task Detail' }} />
-        <Stack.Screen name="projects/index" options={{ title: 'Projects' }} />
+        <Stack.Screen name="projects/index" options={{ ...defaultScreenOptions, title: 'Projects' }} />
         <Stack.Screen name="projects/manage" options={{ title: 'Manage Project' }} />
         <Stack.Screen name="projects/[projectId]" options={{ title: 'Project' }} />
-        <Stack.Screen name="new-task" options={{ title: 'New Task' }} />
-        <Stack.Screen name="settings" options={{ headerBackVisible: false, title: 'Settings' }} />
+        <Stack.Screen name="new-task" options={{ ...defaultScreenOptions, title: 'New Task' }} />
+        <Stack.Screen name="settings" options={{ headerBackVisible: false, headerRight: undefined, title: 'Settings' }} />
       </Stack>
       <BottomNavigation />
     </SafeAreaProvider>
