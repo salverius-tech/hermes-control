@@ -364,7 +364,7 @@ def create_app() -> FastAPI:
         try:
             await connections.send_snapshot(
                 websocket,
-                tasks=projection.list_tasks(),
+                tasks=projection.list_tasks(include_archived=True),
                 projects=projection.list_projects(),
                 agents=projection.list_agents(),
             )
