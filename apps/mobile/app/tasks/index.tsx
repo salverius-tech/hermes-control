@@ -1,10 +1,10 @@
-import { Link } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Link } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { TaskStatus } from '@/api/client';
+import { filterTasks, taskFilters, type TaskFilter } from '@/features/tasks/filters';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { StatusPill } from '@/components/StatusPill';
 import { useDataStore } from '@/state/data-store';
@@ -12,41 +12,23 @@ import { removeQueuedTask, retryQueuedTask } from '@/features/tasks/offline-queu
 import { useSettingsStore } from '@/state/settings';
 import { colors, spacing } from '@/theme/tokens';
 
-const filters: Array<{ label: string; value: TaskStatus | 'all' | 'attention' }> = [
-  { label: 'All', value: 'all' },
-  { label: 'Attention', value: 'attention' },
-  { label: 'Running', value: 'running' },
-  { label: 'Done', value: 'completed' },
-  { label: 'Failed', value: 'failed' },
-];
-
 export default function TasksScreen() {
-  const { apiUrl, apiToken } = useSettingsStore();
+  const { apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
   const tasks = useDataStore((state) => state.tasks);
   const queuedTasks = useDataStore((state) => state.queuedTasks);
   const refresh = useDataStore((state) => state.refresh);
   const offline = useDataStore((state) => state.offline);
-  const [filter, setFilter] = useState<(typeof filters)[number]['value']>('all');
-  const [error, setError] = useState<string | null>(null);
-  const [cacheNotice, setCacheNotice] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>('inbox');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
 
   async function loadTasks(showSpinner = false) {
-    try {
-      if (showSpinner) setRefreshing(true);
-      setError(null);
-      await refresh();
-      setCacheNotice(null);
-    } catch (err) {
-      if (offline) setCacheNotice('Showing cached tasks while the API is unavailable.');
-      setError(err instanceof Error ? err.message : 'Failed to load tasks');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    if (showSpinner) setRefreshing(true);
+    await refresh();
+    setLoading(false);
+    setRefreshing(false);
   }
 
   useEffect(() => {
@@ -56,25 +38,19 @@ export default function TasksScreen() {
     return () => clearInterval(interval);
   }, [apiToken, refresh]);
 
-  const visibleTasks = useMemo(() => tasks.filter((task) => {
-    if (query.trim() && !`${task.title} ${task.prompt} ${task.project_id}`.toLowerCase().includes(query.trim().toLowerCase())) return false;
-    if (filter === 'all') return true;
-    if (filter === 'attention') return task.status === 'awaiting_approval' || task.status === 'failed' || task.status === 'blocked';
-    return task.status === filter;
-  }).sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)), [filter, query, tasks]);
+  const visibleTasks = useMemo(() => filterTasks(tasks, filter, query), [filter, query, tasks]);
 
   return (
     <ScrollView refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={() => void loadTasks(true)} refreshing={refreshing} />} contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
-      <Text style={styles.heading}>Work inbox</Text>
-      <Text style={styles.muted}>Tasks refresh automatically while this screen is open.</Text>
+      <Text style={styles.heading}>Tasks</Text>
+      <Text style={styles.muted}>Inbox shows work that needs attention or is still active.</Text>
       <TextInput accessibilityLabel="Search tasks" onChangeText={setQuery} placeholder="Search tasks, prompts, or projects" placeholderTextColor={colors.muted} style={styles.search} value={query} />
       <ScrollView contentContainerStyle={styles.filters} horizontal showsHorizontalScrollIndicator={false}>
-        {filters.map((item) => <Pressable key={item.value} onPress={() => setFilter(item.value)} style={[styles.filter, filter === item.value && styles.filterSelected]}><Text style={[styles.filterText, filter === item.value && styles.filterTextSelected]}>{item.label}</Text></Pressable>)}
+        {taskFilters.map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: filter === item.value }} key={item.value} onPress={() => setFilter(item.value)} style={[styles.filter, filter === item.value && styles.filterSelected]}><Text style={[styles.filterText, filter === item.value && styles.filterTextSelected]}>{item.label}</Text></Pressable>)}
       </ScrollView>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
       {!apiToken ? <Text style={styles.muted}>Configure your API token in Settings.</Text> : null}
-      {cacheNotice || offline ? <Text style={styles.muted}>{cacheNotice || 'Showing cached tasks while the API is unavailable.'}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {offline ? <Text style={styles.muted}>Showing cached tasks while the API is unavailable.</Text> : null}
       {queuedTasks.map((item) => (
         <View key={item.local_id} style={styles.queuedCard}>
           <View style={styles.cardTop}><Text style={styles.title} numberOfLines={2}>{item.request.prompt}</Text><Text style={styles.queueStatus}>{item.state}</Text></View>
@@ -85,7 +61,7 @@ export default function TasksScreen() {
           </View>
         </View>
       ))}
-      {visibleTasks.length === 0 && !loading ? <Text style={styles.muted}>No tasks in this view.</Text> : null}
+      {visibleTasks.length === 0 && !loading ? <Text style={styles.muted}>{filter === 'inbox' ? 'No work needs your attention right now.' : 'No tasks in this view.'}</Text> : null}
       {visibleTasks.map((task) => (
         <Link key={task.task_id} href={`/tasks/${task.task_id}`} asChild>
           <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
@@ -103,7 +79,6 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 20, borderWidth: 1, gap: spacing.sm, padding: spacing.lg },
   cardTop: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
   container: { gap: spacing.md, padding: spacing.lg },
-  error: { color: colors.danger, fontSize: 15 },
   filter: { borderColor: colors.border, borderRadius: 999, borderWidth: 1, marginRight: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   filterSelected: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   filterText: { color: colors.muted, fontWeight: '800' },

@@ -35,7 +35,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       await flushTaskQueue(AsyncStorage, apiUrl, apiToken);
       const queuedTasks = await loadTaskQueue(AsyncStorage);
       const [tasks, projects, sessions, agents, diagnostics] = await Promise.all([
-        apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks'), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
+        apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks?include_archived=true'), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
         apiFetch<SessionSummary[]>(apiUrl, apiToken, '/sessions'), apiFetch<AgentStatus[]>(apiUrl, apiToken, '/agents'), apiFetch<Diagnostics>(apiUrl, apiToken, '/diagnostics'),
       ]);
       const attention = attentionItems(tasks);

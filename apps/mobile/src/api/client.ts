@@ -14,6 +14,7 @@ export type TaskSummary = {
   requires_approval: boolean;
   created_at: string;
   updated_at: string;
+  archived_at?: string | null;
   progress_log: string[];
   result_summary?: string | null;
   error?: string | null;
