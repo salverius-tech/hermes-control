@@ -37,6 +37,40 @@ def test_cancel_unknown_task_returns_404(monkeypatch):
     assert response.status_code == 404
 
 
+def test_archive_terminal_task_hides_it_from_default_list_and_can_be_restored(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer dev-token"}
+    created = client.post("/tasks", headers=headers, json={"prompt": "Archive this task"}).json()
+    client.post(f"/tasks/{created['task_id']}/cancel", headers=headers)
+
+    archived = client.post(f"/tasks/{created['task_id']}/archive", headers=headers)
+
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+    assert client.get("/tasks", headers=headers).json() == []
+    assert client.get("/tasks?include_archived=true", headers=headers).json()[0]["task_id"] == created["task_id"]
+    assert client.post(f"/tasks/{created['task_id']}/restore", headers=headers).json()["archived_at"] is None
+
+
+def test_archive_active_or_unknown_task_returns_clear_error(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer dev-token"}
+    created = client.post(
+        "/tasks",
+        headers=headers,
+        json={"prompt": "Do not archive active work", "requires_approval": True},
+    ).json()
+
+    active_response = client.post(f"/tasks/{created['task_id']}/archive", headers=headers)
+    unknown_response = client.post("/tasks/task-missing/archive", headers=headers)
+
+    assert active_response.status_code == 409
+    assert "terminal" in active_response.json()["detail"]
+    assert unknown_response.status_code == 404
+
+
 def test_retry_task_creates_new_task_with_original_prompt(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())

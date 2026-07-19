@@ -61,6 +61,7 @@ class TaskSummary(BaseModel):
     requires_approval: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    archived_at: datetime | None = None
     progress_log: list[str] = Field(default_factory=list)
     result_summary: str | None = None
     error: str | None = None

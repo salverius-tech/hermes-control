@@ -61,8 +61,9 @@ class TaskProjection:
             )
         return task
 
-    def list_tasks(self) -> list[TaskSummary]:
-        return sorted(self._tasks.values(), key=lambda task: task.created_at, reverse=True)
+    def list_tasks(self, *, include_archived: bool = False) -> list[TaskSummary]:
+        tasks = self._tasks.values() if include_archived else (task for task in self._tasks.values() if task.archived_at is None)
+        return sorted(tasks, key=lambda task: task.created_at, reverse=True)
 
     def get_task(self, task_id: str) -> TaskSummary | None:
         return self._tasks.get(task_id)
@@ -96,6 +97,21 @@ class TaskProjection:
             progress_message="Task rejected from mobile control",
             event_type="task.rejected",
         )
+
+    def archive_task(self, task_id: str) -> TaskSummary:
+        task = self._tasks[task_id]
+        terminal_statuses = {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELED, TaskStatus.REJECTED, TaskStatus.BLOCKED}
+        if TaskStatus(task.status) not in terminal_statuses:
+            raise ValueError("Only terminal tasks can be archived")
+        if task.archived_at is not None:
+            return task
+        return self._set_archived(task, archived_at=datetime.now(timezone.utc), event_type="task.archived", message="Task removed from inbox")
+
+    def restore_task(self, task_id: str) -> TaskSummary:
+        task = self._tasks[task_id]
+        if task.archived_at is None:
+            return task
+        return self._set_archived(task, archived_at=None, event_type="task.restored", message="Task restored to inbox")
 
     def list_task_events(self, task_id: str) -> list[TaskEvent]:
         return sorted(self._events.get(task_id, []), key=lambda event: event.created_at)
@@ -167,6 +183,13 @@ class TaskProjection:
             self._store.save_event(event)
         return event
 
+    def _set_archived(self, task: TaskSummary, *, archived_at: datetime | None, event_type: str, message: str) -> TaskSummary:
+        updated = task.model_copy(update={"archived_at": archived_at, "updated_at": datetime.now(timezone.utc)})
+        self._tasks[task.task_id] = updated
+        self._save(updated)
+        self.record_event(task.task_id, event_type=event_type, status=TaskStatus(updated.status), message=message)
+        return updated
+
     def _save(self, task: TaskSummary) -> None:
         if self._store is not None:
             self._store.save_task(task)
@@ -176,6 +199,8 @@ class TaskProjection:
         known = {project.project_id: project for project in workspace_projects}
         counts: dict[str, dict[TaskStatus, int]] = defaultdict(lambda: defaultdict(int))
         for task in self._tasks.values():
+            if task.archived_at is not None:
+                continue
             counts[task.project_id][TaskStatus(task.status)] += 1
 
         projects: list[ProjectSummary] = []
