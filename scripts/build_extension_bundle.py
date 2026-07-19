@@ -17,7 +17,7 @@ FILES = (
     "services/hermes_extension/protocol.py",
     "services/hermes_extension/server.py",
     "services/hermes_extension/README.md",
-    "deploy/hermes-control-extension.tmpfiles",
+    "scripts/install_extension_runtime.sh",
 )
 
 

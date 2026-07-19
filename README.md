@@ -98,9 +98,14 @@ Build a distributable Hermes plugin bundle from the repository root:
 ```bash
 python3 scripts/build_extension_bundle.py --output /tmp/hermes-control-extension.tar.gz
 tar -xzf /tmp/hermes-control-extension.tar.gz -C /opt/hermes/plugins
-sudo install -m 0644 deploy/hermes-control-extension.tmpfiles /etc/tmpfiles.d/hermes-control-extension.conf
-sudo systemd-tmpfiles --create /etc/tmpfiles.d/hermes-control-extension.conf
+sudo /opt/hermes/plugins/hermes-control-extension-0.1.0/scripts/install_extension_runtime.sh
 ```
+
+The Hermes plugin installer installs plugin files but does not modify systemd
+units or create `/run` directories. The runtime installation helper adds a
+systemd drop-in with `RuntimeDirectory=hermes`, so the directory is created
+with the same owner as the `hermes-gateway` service on every boot. This avoids
+hard-coding a service account such as `hermes` or `anvil` in the plugin bundle.
 
 Configure the same socket path and bridge token for the Hermes plugin and Control API. The plugin requires `HERMES_CONTROL_EXTENSION_TOKEN` by default; only set `HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED=1` for local development.
 

@@ -1,2 +1,3 @@
-# Create the private runtime directory used by the Hermes Control Extension socket.
-d /run/hermes 0750 hermes hermes -
+# Deprecated: use scripts/install_extension_runtime.sh instead.
+# The helper installs a systemd RuntimeDirectory= drop-in and derives the
+# runtime directory ownership from the hermes-gateway service account.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import threading
 from typing import Any
@@ -17,6 +18,7 @@ except ImportError:
 
 _bridge_stop_event = threading.Event()
 _bridge_thread: threading.Thread | None = None
+_logger = logging.getLogger(__name__)
 
 
 _TOOL_SCHEMA = {
@@ -129,7 +131,7 @@ def _run_bridge() -> None:
     try:
         asyncio.run(serve())
     except (OSError, RuntimeError):
-        return
+        _logger.exception("Hermes Control Extension bridge failed to start at %s", socket_path)
 
 
 def _start_bridge() -> None:
