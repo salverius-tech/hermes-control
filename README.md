@@ -98,16 +98,19 @@ Build a distributable Hermes plugin bundle from the repository root:
 ```bash
 python3 scripts/build_extension_bundle.py --output /tmp/hermes-control-extension.tar.gz
 tar -xzf /tmp/hermes-control-extension.tar.gz -C /opt/hermes/plugins
-sudo /opt/hermes/plugins/hermes-control-extension-0.1.0/scripts/install_extension_runtime.sh
+sudo install -m 0644 /opt/hermes/plugins/hermes-control-extension-0.1.0/deploy/hermes-control-bridge.service /etc/systemd/system/hermes-control-bridge.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now hermes-control-bridge
 ```
 
-The Hermes plugin installer installs plugin files but does not modify systemd
-units or create `/run` directories. The runtime installation helper adds a
-systemd drop-in with `RuntimeDirectory=hermes`, so the directory is created
-with the same owner as the `hermes-gateway` service on every boot. This avoids
-hard-coding a service account such as `hermes` or `anvil` in the plugin bundle.
+The Hermes plugin installer installs/enables plugin files only. The bridge is a
+separate systemd service and must use the same service account, environment
+file, socket path, and bridge token as the Control API. Its `RuntimeDirectory`
+creates `/run/hermes` with the bridge service account's ownership at boot.
 
-Configure the same socket path and bridge token for the Hermes plugin and Control API. The plugin requires `HERMES_CONTROL_EXTENSION_TOKEN` by default; only set `HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED=1` for local development.
+Configure the same socket path and bridge token for the bridge service and
+Control API. The bridge requires `HERMES_CONTROL_EXTENSION_TOKEN` by default;
+only set `HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED=1` for local development.
 
 ## Verification
 

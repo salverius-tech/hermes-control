@@ -16,8 +16,9 @@ FILES = (
     "services/hermes_extension/host.py",
     "services/hermes_extension/protocol.py",
     "services/hermes_extension/server.py",
+    "services/hermes_extension/runner.py",
     "services/hermes_extension/README.md",
-    "scripts/install_extension_runtime.sh",
+    "deploy/hermes-control-bridge.service",
 )
 
 
