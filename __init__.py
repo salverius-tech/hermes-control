@@ -1,26 +1,18 @@
-"""Hermes Control Extension plugin entrypoint."""
+"""Hermes Control Extension plugin entrypoint.
 
+The plugin registers the Control API tool only. Task execution is owned by the
+separately supervised ``hermes-control-bridge.service``.
+"""
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
-import sys
-import threading
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-try:
-    from .services.hermes_extension import HermesExtensionServer, handler_from_environment
-except ImportError:
-    from services.hermes_extension import HermesExtensionServer, handler_from_environment
-
-_bridge_stop_event = threading.Event()
-_bridge_thread: threading.Thread | None = None
 _logger = logging.getLogger(__name__)
-
 
 _TOOL_SCHEMA = {
     "name": "hermes_control",
@@ -28,11 +20,7 @@ _TOOL_SCHEMA = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {
-                "type": "string",
-                "enum": ["health", "tasks", "create_task"],
-                "description": "Control API operation.",
-            },
+            "action": {"type": "string", "enum": ["health", "tasks", "create_task"]},
             "prompt": {"type": "string", "description": "Prompt for create_task."},
             "project_id": {"type": "string", "description": "Project for create_task."},
             "priority": {"type": "string", "enum": ["low", "normal", "high"]},
@@ -56,25 +44,21 @@ def _control_api(args: dict[str, Any]) -> str:
         prompt = str(args.get("prompt", "")).strip()
         if not prompt:
             return json.dumps({"ok": False, "error": "prompt is required for create_task"})
-        path = "/tasks"
-        method = "POST"
-        body = json.dumps(
-            {
-                "prompt": prompt,
-                "project_id": str(args.get("project_id", "default")),
-                "priority": str(args.get("priority", "normal")),
-                "source": "hermes-plugin",
-                "requires_approval": bool(args.get("requires_approval", False)),
-            }
-        ).encode()
+        path, method = "/tasks", "POST"
+        body = json.dumps({
+            "prompt": prompt,
+            "project_id": str(args.get("project_id", "default")),
+            "priority": str(args.get("priority", "normal")),
+            "source": "hermes-plugin",
+            "requires_approval": bool(args.get("requires_approval", False)),
+        }).encode()
     if path is None:
         return json.dumps({"ok": False, "error": "unsupported action"})
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     if body is not None:
         headers["Content-Type"] = "application/json"
     try:
-        request = Request(f"{base_url}{path}", data=body, headers=headers, method=method)
-        with urlopen(request, timeout=10) as response:
+        with urlopen(Request(f"{base_url}{path}", data=body, headers=headers, method=method), timeout=10) as response:
             payload = json.loads(response.read())
         return json.dumps({"ok": True, "data": payload}, sort_keys=True)
     except (HTTPError, URLError, OSError, TimeoutError, ValueError) as error:
@@ -83,74 +67,6 @@ def _control_api(args: dict[str, Any]) -> str:
 
 def _handle_control(args: dict[str, Any], **_: Any) -> str:
     return _control_api(args)
-
-
-def _positive_int(name: str, default: int) -> int:
-    value = int(os.getenv(name, str(default)))
-    if value < 1:
-        raise ValueError(f"{name} must be positive")
-    return value
-
-
-def _nonnegative_float(name: str, default: float) -> float:
-    value = float(os.getenv(name, str(default)))
-    if value < 0:
-        raise ValueError(f"{name} must not be negative")
-    return value
-
-
-def _bridge_token() -> str | None:
-    token = os.getenv("HERMES_CONTROL_EXTENSION_TOKEN")
-    if token:
-        return token
-    if os.getenv("HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED") == "1":
-        return None
-    raise RuntimeError(
-        "HERMES_CONTROL_EXTENSION_TOKEN is required; set "
-        "HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED=1 only for development"
-    )
-
-
-def _run_bridge() -> None:
-    socket_path = os.getenv("HERMES_CONTROL_EXTENSION_SOCKET", "/run/hermes/control-extension.sock")
-
-    async def serve() -> None:
-        server = HermesExtensionServer(
-            socket_path,
-            handler_from_environment(),
-            auth_token=_bridge_token(),
-            max_message_bytes=_positive_int("HERMES_CONTROL_EXTENSION_MAX_MESSAGE_BYTES", 1_048_576),
-            max_concurrent_tasks=_positive_int("HERMES_CONTROL_EXTENSION_MAX_CONCURRENT_TASKS", 4),
-            heartbeat_seconds=_nonnegative_float("HERMES_CONTROL_EXTENSION_HEARTBEAT_SECONDS", 0),
-        )
-        try:
-            await server.start()
-            await asyncio.to_thread(_bridge_stop_event.wait)
-        finally:
-            await server.close()
-
-    try:
-        asyncio.run(serve())
-    except (OSError, RuntimeError):
-        _logger.exception("Hermes Control Extension bridge failed to start at %s", socket_path)
-
-
-def _is_gateway_process() -> bool:
-    return sys.argv[-2:] == ["gateway", "run"]
-
-
-def _start_bridge() -> None:
-    global _bridge_thread
-    if _bridge_thread is not None and _bridge_thread.is_alive():
-        return
-    _bridge_stop_event.clear()
-    _bridge_thread = threading.Thread(target=_run_bridge, name="hermes-control-extension", daemon=True)
-    _bridge_thread.start()
-
-
-def stop_bridge() -> None:
-    """Stop the plugin bridge during Hermes plugin unload or test teardown."""
-    _bridge_stop_event.set()
 
 
 def register(ctx) -> None:
@@ -162,7 +78,4 @@ def register(ctx) -> None:
         description="Read the local Hermes Control API.",
         emoji="📱",
     )
-    if _is_gateway_process():
-        _start_bridge()
-    else:
-        _logger.debug("Hermes Control Extension bridge not started outside the gateway process")
+    _logger.debug("Hermes Control Extension registered; bridge lifecycle is managed by hermes-control-bridge.service")

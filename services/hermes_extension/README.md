@@ -45,10 +45,11 @@ implement a handler that maps the installed Hermes lifecycle and tool hooks to
 this interface.
 
 The repository root is also a Hermes standalone-plugin entrypoint
-(`plugin.yaml` + `__init__.py`). When installed into Hermes, its `register(ctx)`
-function registers the `hermes_control` read tool and starts the local bridge.
-The current handler uses `HERMES_CONTROL_EXTENSION_HERMES_COMMAND` as the
-compatibility execution path.
+(`plugin.yaml` + `__init__.py`). It registers the `hermes_control` read tool.
+The local bridge is deliberately owned by the separately supervised
+`hermes-control-bridge.service`, not by the plugin process. The current handler
+uses `HERMES_CONTROL_EXTENSION_HERMES_COMMAND` as the compatibility execution
+path.
 
 Configuration:
 

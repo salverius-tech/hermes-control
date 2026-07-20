@@ -1,0 +1,25 @@
+[Unit]
+Description=Hermes Control Extension Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/opt/hermes-mobile-control
+EnvironmentFile=/etc/hermes-mobile-control/control-api.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hermes-mobile-control/.venv/bin/python -m services.hermes_extension.runner
+Restart=always
+RestartSec=3
+RuntimeDirectory=hermes
+RuntimeDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# Hermes CLI needs the configured Hermes profile/home.
+ReadWritePaths=/var/lib/hermes-mobile-control
+
+[Install]
+WantedBy=multi-user.target

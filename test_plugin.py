@@ -103,49 +103,15 @@ def test_plugin_tool_converts_api_errors_to_structured_failure(monkeypatch):
 
 
 @pytest.mark.unit
-def test_plugin_registers_tool_without_starting_bridge_outside_gateway(monkeypatch):
+def test_plugin_registers_tool_without_starting_a_bridge():
     plugin = load_plugin()
     registered = {}
-    started = []
 
     class Context:
         def register_tool(self, **kwargs):
             registered.update(kwargs)
 
-    monkeypatch.setattr(plugin, "_start_bridge", lambda: started.append(True))
-    monkeypatch.setattr(plugin.sys, "argv", ["hermes", "tools", "list"])
     plugin.register(Context())
 
     assert registered["name"] == "hermes_control"
     assert registered["handler"] is plugin._handle_control
-    assert started == []
-
-
-@pytest.mark.unit
-def test_plugin_starts_bridge_only_in_gateway_process(monkeypatch):
-    plugin = load_plugin()
-    started = []
-
-    class Context:
-        def register_tool(self, **_kwargs):
-            return None
-
-    monkeypatch.setattr(plugin, "_start_bridge", lambda: started.append(True))
-    monkeypatch.setattr(plugin.sys, "argv", ["python", "-m", "hermes_cli.main", "gateway", "run"])
-    plugin.register(Context())
-
-    assert started == [True]
-
-
-
-@pytest.mark.unit
-def test_bridge_requires_token_unless_explicitly_enabled_for_development(monkeypatch):
-    plugin = load_plugin()
-    monkeypatch.delenv("HERMES_CONTROL_EXTENSION_TOKEN", raising=False)
-    monkeypatch.delenv("HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED", raising=False)
-
-    with pytest.raises(RuntimeError, match="TOKEN is required"):
-        plugin._bridge_token()
-
-    monkeypatch.setenv("HERMES_CONTROL_EXTENSION_ALLOW_UNAUTHENTICATED", "1")
-    assert plugin._bridge_token() is None

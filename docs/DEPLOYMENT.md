@@ -86,7 +86,11 @@ Recommended production values:
 ```text
 CONTROL_API_TOKEN=<generated-token>
 CONTROL_API_DB_PATH=/var/lib/hermes-mobile-control/control-api.db
-CONTROL_API_HERMES_COMMAND="/absolute/path/to/hermes chat -q"
+CONTROL_API_HERMES_PLUGIN_SOCKET=/run/hermes/control-extension.sock
+CONTROL_API_HERMES_PLUGIN_TOKEN=<local-bridge-token>
+HERMES_CONTROL_EXTENSION_SOCKET=/run/hermes/control-extension.sock
+HERMES_CONTROL_EXTENSION_TOKEN=<same-local-bridge-token>
+HERMES_CONTROL_EXTENSION_HERMES_COMMAND="/absolute/path/to/hermes chat --ignore-user-config --ignore-rules -q"
 # CONTROL_API_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/[REDACTED]
 ```
 
@@ -102,6 +106,14 @@ sudo install -o root -g root -m 0644 \
 sudo systemctl daemon-reload
 sudo systemctl enable --now hermes-mobile-control-api
 sudo systemctl status hermes-mobile-control-api --no-pager
+
+# The bridge is a separate, restart-supervised owner of task execution.
+sudo install -o root -g root -m 0644 \
+  /opt/hermes-mobile-control/deploy/hermes-control-bridge.service \
+  /etc/systemd/system/hermes-control-bridge.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now hermes-control-bridge
+sudo systemctl status hermes-control-bridge --no-pager
 ```
 
 The example unit binds uvicorn to `127.0.0.1:8787` so only Caddy or local processes can reach it directly. It grants explicit state write access to `/var/lib/hermes-mobile-control`; the service user may also use its Hermes profile under its home directory when `CONTROL_API_HERMES_COMMAND` runs.

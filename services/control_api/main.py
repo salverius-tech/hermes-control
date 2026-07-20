@@ -43,7 +43,6 @@ def create_app() -> FastAPI:
         notifier=notifier_from_environment(),
         max_concurrent_tasks=int(os.getenv("CONTROL_API_MAX_CONCURRENT_TASKS", "4")),
     )
-    task_service.reconcile_after_restart()
     task_rate_limiter = RateLimiter(int(os.getenv("CONTROL_API_RATE_LIMIT_PER_MINUTE", "60")))
     connections = ConnectionManager()
 
@@ -372,6 +371,17 @@ def create_app() -> FastAPI:
                 await websocket.receive_text()
         except WebSocketDisconnect:
             connections.disconnect(websocket)
+
+    @app.on_event("startup")
+    async def resume_persisted_tasks() -> None:
+        # The API worker is restartable. Reuse the stable task ID as the bridge
+        # request ID so running work reattaches/replays instead of duplicating.
+        for task in task_service.resume_after_restart():
+            task_service.start_task(
+                task,
+                request_from_task(task, requires_approval=False),
+                on_update=broadcast_task_update,
+            )
 
     return app
 

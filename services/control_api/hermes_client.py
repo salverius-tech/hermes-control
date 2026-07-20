@@ -149,6 +149,25 @@ class HermesPluginExecutor:
         request_id: str | None = None,
     ) -> HermesExecutionResult:
         request_id = request_id or str(uuid.uuid4())
+        # A task may outlive an API connection. Reconnect once with the same
+        # request id so the bridge can replay its retained event stream instead
+        # of launching duplicate Hermes work.
+        for attempt in range(2):
+            try:
+                return await self._run_once(request, request_id=request_id, on_log=on_log)
+            except RuntimeError as exc:
+                if "bridge disconnected before task completion" not in str(exc) or attempt:
+                    raise
+                await asyncio.sleep(0.25)
+        raise RuntimeError("Hermes extension bridge disconnected before task completion")
+
+    async def _run_once(
+        self,
+        request: TaskCreateRequest,
+        *,
+        request_id: str,
+        on_log: TaskLogCallback | None,
+    ) -> HermesExecutionResult:
         reader, writer = await asyncio.wait_for(
             asyncio.open_unix_connection(self.socket_path), timeout=self.timeout_seconds
         )
@@ -261,6 +280,17 @@ class HermesTaskService:
             return await self._execute_with_slot(task.task_id, request, on_update=on_update)
         return task
 
+    def resume_after_restart(self) -> list[TaskSummary]:
+        """Return persisted work for reattachment by the new API process.
+
+        Plugin bridge request IDs are task IDs, so a running task reconnects to
+        its retained bridge job while a queued task is dispatched normally.
+        """
+        return [
+            task for task in self.projection.list_tasks()
+            if TaskStatus(task.status) in {TaskStatus.QUEUED, TaskStatus.RUNNING}
+        ]
+
     def reconcile_after_restart(self) -> list[TaskSummary]:
         interrupted: list[TaskSummary] = []
         for task in self.projection.list_tasks():
@@ -336,7 +366,10 @@ class HermesTaskService:
                 await on_update(latest)
 
         try:
-            result = await self.executor.run(request, on_log=record_progress)
+            if isinstance(self.executor, HermesPluginExecutor):
+                result = await self.executor.run(request, on_log=record_progress, request_id=task_id)
+            else:
+                result = await self.executor.run(request, on_log=record_progress)
         except asyncio.CancelledError:
             canceled = self.projection.get_task(task_id)
             if canceled is None or TaskStatus(canceled.status) != TaskStatus.CANCELED:

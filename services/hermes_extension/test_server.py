@@ -105,7 +105,7 @@ async def test_extension_server_rejects_missing_or_invalid_auth_token(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_client_disconnect_cancels_inflight_handler(tmp_path):
+async def test_client_disconnect_does_not_cancel_inflight_handler(tmp_path):
     socket_path = str(tmp_path / "cancel-extension.sock")
 
     class BlockingHandler:
@@ -142,8 +142,10 @@ async def test_client_disconnect_cancels_inflight_handler(tmp_path):
 
     writer.close()
     await writer.wait_closed()
-    await asyncio.wait_for(handler.cancelled.wait(), timeout=1)
+    await asyncio.sleep(0.05)
+    assert not handler.cancelled.is_set()
     await server.close()
+    await asyncio.wait_for(handler.cancelled.wait(), timeout=1)
 
 
 @pytest.mark.anyio
