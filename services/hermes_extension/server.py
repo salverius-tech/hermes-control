@@ -189,7 +189,8 @@ class HermesExtensionServer:
             # was terminated; a reconnecting API will retry the stable request id.
             raise
         except Exception as exc:  # noqa: BLE001
-            await emit(PluginEvent(event_type="failed", request_id=job.request.request_id, error=str(exc)))
+            detail = str(exc).strip() or f"{type(exc).__name__} raised without a diagnostic message"
+            await emit(PluginEvent(event_type="failed", request_id=job.request.request_id, error=detail))
         finally:
             if heartbeat is not None:
                 heartbeat.cancel()
@@ -203,7 +204,11 @@ class HermesExtensionServer:
     async def _heartbeat_loop(self, request_id: str, emit: PluginEventSink) -> None:
         while True:
             await asyncio.sleep(self.heartbeat_seconds)
-            await emit(PluginEvent(event_type="heartbeat", request_id=request_id))
+            await emit(PluginEvent(
+                event_type="heartbeat",
+                request_id=request_id,
+                metadata={"bridge": "alive"},
+            ))
 
     def _store_replay(self, request_id: str, records: list[bytes]) -> None:
         self._replay_cache[request_id] = tuple(records)

@@ -42,6 +42,7 @@ def create_app() -> FastAPI:
         projection=projection,
         notifier=notifier_from_environment(),
         max_concurrent_tasks=int(os.getenv("CONTROL_API_MAX_CONCURRENT_TASKS", "4")),
+        stall_after_seconds=float(os.getenv("CONTROL_API_TASK_STALL_SECONDS", "600")),
     )
     task_rate_limiter = RateLimiter(int(os.getenv("CONTROL_API_RATE_LIMIT_PER_MINUTE", "60")))
     connections = ConnectionManager()
@@ -242,7 +243,7 @@ def create_app() -> FastAPI:
 
     @app.get("/attention", dependencies=[Depends(require_auth)])
     def list_attention() -> list[TaskSummary]:
-        return [task for task in projection.list_tasks() if task.status in {"awaiting_approval", "failed", "blocked"}]
+        return [task for task in projection.list_tasks() if task.status in {"awaiting_approval", "attention_required", "failed", "blocked"}]
 
     @app.get("/projects", dependencies=[Depends(require_auth)])
     def list_projects(include_archived: bool = False) -> list[ProjectSummary]:
@@ -268,8 +269,8 @@ def create_app() -> FastAPI:
         return {
             "project_id": project_id,
             "total": len(tasks),
-            "attention": sum(task.status in {"awaiting_approval", "failed", "blocked"} for task in tasks),
-            "active": sum(task.status in {"queued", "running"} for task in tasks),
+            "attention": sum(task.status in {"awaiting_approval", "attention_required", "failed", "blocked"} for task in tasks),
+            "active": sum(task.status in {"queued", "running", "attention_required"} for task in tasks),
             "completed": sum(task.status == "completed" for task in tasks),
             "failed": sum(task.status in {"failed", "canceled", "rejected"} for task in tasks),
         }

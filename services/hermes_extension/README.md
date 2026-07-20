@@ -27,7 +27,15 @@ The Control API sends one `task.submit` envelope:
 
 The Hermes-side adapter emits `task.event` envelopes using the same
 `request_id`. Supported terminal events are `completed` and `failed`; progress
-messages use `event: "progress"` and `message`.
+messages use `event: "progress"` and `message`. Heartbeats use `event: "heartbeat"`
+and may carry `metadata` describing bridge and child-process liveness.
+
+Long-running tasks are supervised by event liveness rather than a fixed task-duration
+timeout. A quiet task remains valid while it receives heartbeats; after the API's
+configured output-quiet threshold it is marked `attention_required`, not failed. The
+Control API records `last_heartbeat_at`, `last_output_at`, `execution_state`, and
+`execution_phase` on the task detail and retains heartbeat metadata in its event timeline. `quiet` means the child
+process is alive but has not emitted output; it is not a failure classification.
 
 The Control API selects the bridge with:
 
@@ -61,6 +69,10 @@ HERMES_CONTROL_EXTENSION_TOKEN='replace-with-local-bridge-token'
 HERMES_CONTROL_EXTENSION_MAX_CONCURRENT_TASKS=4
 HERMES_CONTROL_EXTENSION_MAX_MESSAGE_BYTES=1048576
 HERMES_CONTROL_EXTENSION_HEARTBEAT_SECONDS=15
+# Optional hard safety cap. Leave unset for activity-aware long-running tasks.
+# HERMES_CONTROL_EXTENSION_HARD_TIMEOUT_SECONDS=86400
+# Child-process liveness heartbeat interval.
+HERMES_CONTROL_EXTENSION_PROCESS_HEARTBEAT_SECONDS=15
 HERMES_CONTROL_EXTENSION_HERMES_COMMAND='hermes chat -q'
 CONTROL_API_URL='http://127.0.0.1:8787'
 CONTROL_API_TOKEN='replace-with-control-api-token'

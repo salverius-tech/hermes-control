@@ -6,12 +6,13 @@ import os
 import re
 import shlex
 import uuid
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Protocol
 
 from services.hermes_extension import PluginEvent, PluginRequest, decode_message, encode_message
 
-from .models import TaskCreateRequest, TaskStatus, TaskSummary
+from .models import TaskCreateRequest, TaskExecutionState, TaskStatus, TaskSummary
 from .projection import TaskProjection
 
 
@@ -23,6 +24,7 @@ class HermesExecutionResult:
 
 
 TaskLogCallback = Callable[[str], Awaitable[None]]
+TaskEventCallback = Callable[[PluginEvent], Awaitable[None]]
 
 
 class HermesExecutor(Protocol):
@@ -62,7 +64,7 @@ class LocalHermesCommandExecutor:
     """
 
     command: tuple[str, ...]
-    timeout_seconds: float = 900
+    timeout_seconds: float | None = None
 
     async def run(self, request: TaskCreateRequest, *, on_log: TaskLogCallback | None = None) -> HermesExecutionResult:
         query_mode = any(argument in {"-q", "--query"} for argument in self.command)
@@ -112,7 +114,10 @@ class LocalHermesCommandExecutor:
         except TimeoutError as exc:
             process.kill()
             await process.wait()
-            raise RuntimeError("Hermes command timed out") from exc
+            assert self.timeout_seconds is not None
+            raise RuntimeError(
+                f"Hermes command exceeded the configured hard execution limit ({self.timeout_seconds:g} seconds)"
+            ) from exc
         except asyncio.CancelledError:
             process.kill()
             await process.wait()
@@ -138,7 +143,9 @@ class HermesPluginExecutor:
     """
 
     socket_path: str
-    timeout_seconds: float = 900
+    # This is an inactivity limit for bridge events, not a task-duration limit.
+    # The bridge emits heartbeats while a valid long-running task is quiet.
+    timeout_seconds: float = 60
     auth_token: str | None = None
 
     async def run(
@@ -146,6 +153,7 @@ class HermesPluginExecutor:
         request: TaskCreateRequest,
         *,
         on_log: TaskLogCallback | None = None,
+        on_event: TaskEventCallback | None = None,
         request_id: str | None = None,
     ) -> HermesExecutionResult:
         request_id = request_id or str(uuid.uuid4())
@@ -154,7 +162,7 @@ class HermesPluginExecutor:
         # of launching duplicate Hermes work.
         for attempt in range(2):
             try:
-                return await self._run_once(request, request_id=request_id, on_log=on_log)
+                return await self._run_once(request, request_id=request_id, on_log=on_log, on_event=on_event)
             except RuntimeError as exc:
                 if "bridge disconnected before task completion" not in str(exc) or attempt:
                     raise
@@ -167,6 +175,7 @@ class HermesPluginExecutor:
         *,
         request_id: str,
         on_log: TaskLogCallback | None,
+        on_event: TaskEventCallback | None,
     ) -> HermesExecutionResult:
         reader, writer = await asyncio.wait_for(
             asyncio.open_unix_connection(self.socket_path), timeout=self.timeout_seconds
@@ -188,7 +197,13 @@ class HermesPluginExecutor:
         last_sequence = 0
         try:
             while True:
-                line = await asyncio.wait_for(reader.readline(), timeout=self.timeout_seconds)
+                try:
+                    line = await asyncio.wait_for(reader.readline(), timeout=self.timeout_seconds)
+                except TimeoutError as exc:
+                    raise RuntimeError(
+                        f"No bridge heartbeat or task output was received for {self.timeout_seconds:g} seconds; "
+                        "the bridge may be stalled or unavailable"
+                    ) from exc
                 if not line:
                     raise RuntimeError("Hermes extension bridge disconnected before task completion")
                 event = PluginEvent.from_message(decode_message(line))
@@ -198,6 +213,8 @@ class HermesPluginExecutor:
                     if event.sequence != last_sequence + 1:
                         raise RuntimeError("Hermes extension bridge event sequence is invalid")
                     last_sequence = event.sequence
+                if on_event is not None:
+                    await on_event(event)
                 if event.message:
                     logs.append(event.message)
                     if on_log is not None:
@@ -224,6 +241,8 @@ def _classify_failure(message: str) -> tuple[str, bool]:
     lowered = message.lower()
     if "not configured" in lowered:
         return "configuration", True
+    if "no bridge heartbeat" in lowered:
+        return "stalled", True
     if "connection refused" in lowered or "timed out" in lowered or "socket" in lowered:
         return "connectivity", True
     if "does not exist" in lowered or "folder" in lowered or "directory" in lowered:
@@ -254,6 +273,7 @@ class HermesTaskService:
     executor: HermesExecutor = field(default_factory=executor_from_environment)
     notifier: TaskNotifier = field(default_factory=NullTaskNotifier)
     max_concurrent_tasks: int = 4
+    stall_after_seconds: float = 600
     _running_tasks: dict[str, asyncio.Task[TaskSummary]] = field(default_factory=dict, init=False)
     _execution_slots: asyncio.Semaphore = field(init=False)
 
@@ -264,6 +284,8 @@ class HermesTaskService:
     def __post_init__(self) -> None:
         if self.max_concurrent_tasks < 1:
             raise ValueError("max_concurrent_tasks must be positive")
+        if self.stall_after_seconds <= 0:
+            raise ValueError("stall_after_seconds must be positive")
         self._execution_slots = asyncio.Semaphore(self.max_concurrent_tasks)
 
     async def submit_task(
@@ -288,13 +310,13 @@ class HermesTaskService:
         """
         return [
             task for task in self.projection.list_tasks()
-            if TaskStatus(task.status) in {TaskStatus.QUEUED, TaskStatus.RUNNING}
+            if TaskStatus(task.status) in {TaskStatus.QUEUED, TaskStatus.RUNNING, TaskStatus.ATTENTION_REQUIRED}
         ]
 
     def reconcile_after_restart(self) -> list[TaskSummary]:
         interrupted: list[TaskSummary] = []
         for task in self.projection.list_tasks():
-            if TaskStatus(task.status) not in {TaskStatus.QUEUED, TaskStatus.RUNNING}:
+            if TaskStatus(task.status) not in {TaskStatus.QUEUED, TaskStatus.RUNNING, TaskStatus.ATTENTION_REQUIRED}:
                 continue
             interrupted.append(self.projection.update_task(
                 task.task_id,
@@ -349,6 +371,10 @@ class HermesTaskService:
             task_id,
             status=TaskStatus.RUNNING,
             progress_message="Hermes task started",
+            run_started_at=datetime.now(timezone.utc),
+            execution_state=TaskExecutionState.ACTIVE,
+            execution_phase="starting",
+            execution_detail="Task accepted by the Control API",
             event_type="task.started",
         )
         if on_update is not None:
@@ -361,13 +387,70 @@ class HermesTaskService:
             current = self.projection.get_task(task_id)
             if current is not None and TaskStatus(current.status) == TaskStatus.CANCELED:
                 raise asyncio.CancelledError
-            latest = self.projection.update_task(task_id, progress_message=message, event_type="task.progress")
+            resumed = current is not None and TaskStatus(current.status) == TaskStatus.ATTENTION_REQUIRED
+            latest = self.projection.update_task(
+                task_id,
+                status=TaskStatus.RUNNING if resumed else None,
+                progress_message=message,
+                last_output_at=datetime.now(timezone.utc),
+                execution_state=TaskExecutionState.ACTIVE,
+                execution_phase="producing_output",
+                execution_detail=message,
+                event_type="task.resumed" if resumed else "task.progress",
+            )
+            if on_update is not None:
+                await on_update(latest)
+
+        async def record_plugin_event(event: PluginEvent) -> None:
+            nonlocal latest
+            if event.event_type != "heartbeat":
+                return
+            metadata = event.metadata or {}
+            state_value = metadata.get("execution_state")
+            try:
+                execution_state = TaskExecutionState(state_value) if isinstance(state_value, str) else None
+            except ValueError:
+                execution_state = TaskExecutionState.UNKNOWN
+            phase = metadata.get("execution_phase")
+            phase_text = phase if isinstance(phase, str) else None
+            child_alive = metadata.get("child_process") == "alive"
+            detail = "Hermes child process is alive but has not emitted new output" if child_alive else "Control bridge heartbeat received"
+            current = self.projection.get_task(task_id)
+            now = datetime.now(timezone.utc)
+            last_observable_activity = (current.last_output_at or current.run_started_at) if current is not None else None
+            quiet_for_seconds = (now - last_observable_activity).total_seconds() if last_observable_activity else 0
+            stalled = (
+                child_alive
+                and quiet_for_seconds >= self.stall_after_seconds
+                and current is not None
+                and TaskStatus(current.status) == TaskStatus.RUNNING
+            )
+            if stalled:
+                detail = (
+                    f"Task may be stalled: the Hermes child process is alive but has produced no output for "
+                    f"{quiet_for_seconds:.0f} seconds"
+                )
+            latest = self.projection.update_task(
+                task_id,
+                status=TaskStatus.ATTENTION_REQUIRED if stalled else None,
+                last_heartbeat_at=now,
+                execution_state=TaskExecutionState.STALLED if stalled else execution_state,
+                execution_phase=phase_text,
+                execution_detail=detail,
+                event_type="task.stalled" if stalled else "task.heartbeat",
+                event_metadata={**metadata, "quiet_for_seconds": round(quiet_for_seconds, 3)},
+            )
             if on_update is not None:
                 await on_update(latest)
 
         try:
             if isinstance(self.executor, HermesPluginExecutor):
-                result = await self.executor.run(request, on_log=record_progress, request_id=task_id)
+                result = await self.executor.run(
+                    request,
+                    on_log=record_progress,
+                    on_event=record_plugin_event,
+                    request_id=task_id,
+                )
             else:
                 result = await self.executor.run(request, on_log=record_progress)
         except asyncio.CancelledError:

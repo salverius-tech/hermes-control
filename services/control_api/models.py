@@ -11,11 +11,19 @@ class TaskStatus(StrEnum):
     AWAITING_APPROVAL = "awaiting_approval"
     QUEUED = "queued"
     RUNNING = "running"
+    ATTENTION_REQUIRED = "attention_required"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELED = "canceled"
     REJECTED = "rejected"
     BLOCKED = "blocked"
+
+
+class TaskExecutionState(StrEnum):
+    UNKNOWN = "unknown"
+    ACTIVE = "active"
+    QUIET = "quiet"
+    STALLED = "stalled"
 
 
 class TaskCreateRequest(BaseModel):
@@ -74,6 +82,12 @@ class TaskSummary(BaseModel):
     relation: str = "original"
     execution_folder: str | None = None
     idempotency_key: str | None = None
+    run_started_at: datetime | None = None
+    last_heartbeat_at: datetime | None = None
+    last_output_at: datetime | None = None
+    execution_state: TaskExecutionState = TaskExecutionState.UNKNOWN
+    execution_phase: str | None = None
+    execution_detail: str | None = None
 
 
 class TaskEvent(BaseModel):

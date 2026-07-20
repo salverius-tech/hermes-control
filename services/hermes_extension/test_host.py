@@ -199,3 +199,44 @@ async def test_subprocess_handler_reports_nonzero_exit():
             ),
             emit=emit,
         )
+
+
+@pytest.mark.anyio
+async def test_subprocess_handler_reports_alive_but_quiet_heartbeats():
+    handler = SubprocessHermesTaskHandler(
+        (sys.executable, "-u", "-c", "import time; time.sleep(0.04); print('done')"),
+        heartbeat_seconds=0.005,
+    )
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    result = await handler.run(
+        PluginRequest("req-heartbeat", "inspect", "default", "normal", "mobile", False),
+        emit=emit,
+    )
+
+    heartbeats = [event for event in events if event.event_type == "heartbeat"]
+    assert result == "done"
+    assert heartbeats
+    assert all(event.metadata and event.metadata["child_process"] == "alive" for event in heartbeats)
+    assert all(event.metadata and event.metadata["execution_state"] == "quiet" for event in heartbeats)
+
+
+@pytest.mark.anyio
+async def test_subprocess_handler_hard_limit_has_actionable_error():
+    handler = SubprocessHermesTaskHandler(
+        (sys.executable, "-c", "import time; time.sleep(10)"),
+        timeout_seconds=0.01,
+        heartbeat_seconds=0.005,
+    )
+
+    async def emit(_event):
+        return None
+
+    with pytest.raises(RuntimeError, match="configured hard execution limit"):
+        await handler.run(
+            PluginRequest("req-limit", "inspect", "default", "normal", "mobile", False),
+            emit=emit,
+        )

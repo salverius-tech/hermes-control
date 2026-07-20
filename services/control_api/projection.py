@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskStatus, TaskSummary
+from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskExecutionState, TaskStatus, TaskSummary
 from .storage import TaskStore
 from .workspace import HermesWorkspaceStore
 
@@ -72,7 +72,7 @@ class TaskProjection:
         return next((task for task in self._tasks.values() if task.idempotency_key == key), None)
 
     def cancel_task(self, task_id: str) -> TaskSummary:
-        self._require_status(task_id, {TaskStatus.AWAITING_APPROVAL, TaskStatus.QUEUED, TaskStatus.RUNNING})
+        self._require_status(task_id, {TaskStatus.AWAITING_APPROVAL, TaskStatus.QUEUED, TaskStatus.RUNNING, TaskStatus.ATTENTION_REQUIRED})
         return self.update_task(
             task_id,
             status=TaskStatus.CANCELED,
@@ -138,7 +138,14 @@ class TaskProjection:
         blocker_category: str | None = None,
         blocker_message: str | None = None,
         blocker_retryable: bool = False,
+        run_started_at: datetime | None = None,
+        last_heartbeat_at: datetime | None = None,
+        last_output_at: datetime | None = None,
+        execution_state: TaskExecutionState | None = None,
+        execution_phase: str | None = None,
+        execution_detail: str | None = None,
         event_type: str = "task.updated",
+        event_metadata: dict[str, object] | None = None,
     ) -> TaskSummary:
         task = self._tasks[task_id]
         update_data = task.model_dump()
@@ -156,6 +163,18 @@ class TaskProjection:
             update_data["blocker_category"] = blocker_category
             update_data["blocker_message"] = blocker_message or error
             update_data["blocker_retryable"] = blocker_retryable
+        if run_started_at is not None:
+            update_data["run_started_at"] = run_started_at
+        if last_heartbeat_at is not None:
+            update_data["last_heartbeat_at"] = last_heartbeat_at
+        if last_output_at is not None:
+            update_data["last_output_at"] = last_output_at
+        if execution_state is not None:
+            update_data["execution_state"] = execution_state
+        if execution_phase is not None:
+            update_data["execution_phase"] = execution_phase
+        if execution_detail is not None:
+            update_data["execution_detail"] = execution_detail
         update_data["updated_at"] = datetime.now(timezone.utc)
         updated = TaskSummary(**update_data)
         self._tasks[task_id] = updated
@@ -165,6 +184,7 @@ class TaskProjection:
             event_type=event_type,
             status=TaskStatus(updated.status),
             message=progress_message or result_summary or error,
+            metadata=event_metadata,
         )
         return updated
 

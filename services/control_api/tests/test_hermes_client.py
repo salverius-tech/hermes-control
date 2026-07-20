@@ -13,7 +13,7 @@ from services.control_api.hermes_client import (
 )
 from services.control_api.models import TaskCreateRequest, TaskStatus
 from services.control_api.projection import TaskProjection
-from services.hermes_extension import decode_message, encode_message
+from services.hermes_extension import HermesExtensionServer, PluginEvent, decode_message, encode_message
 
 
 pytestmark = pytest.mark.unit
@@ -207,7 +207,7 @@ async def test_local_command_executor_times_out():
         timeout_seconds=0.05,
     )
 
-    with pytest.raises(RuntimeError, match="timed out"):
+    with pytest.raises(RuntimeError, match="configured hard execution limit"):
         await executor.run(TaskCreateRequest(prompt="timeout"))
 
 
@@ -286,3 +286,97 @@ async def test_plugin_executor_round_trips_structured_task_and_progress(tmp_path
     assert received["task"]["project_id"] == "mobile"
     assert progress == ["plugin started"]
     assert result.result_summary == "plugin result"
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(os.name == "nt", reason="Unix-domain extension bridge is not available on Windows")
+async def test_plugin_executor_reports_missing_heartbeat_as_stall(tmp_path):
+    socket_path = str(tmp_path / "silent-extension.sock")
+
+    async def handle(reader, writer):
+        await reader.readline()
+        await asyncio.sleep(0.1)
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_unix_server(handle, path=socket_path)
+    try:
+        with pytest.raises(RuntimeError, match="No bridge heartbeat or task output"):
+            await HermesPluginExecutor(socket_path, timeout_seconds=0.01).run(TaskCreateRequest(prompt="detect a stall"))
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(os.name == "nt", reason="Unix-domain extension bridge is not available on Windows")
+async def test_task_service_persists_plugin_heartbeat_observation(tmp_path):
+    class QuietButAliveHandler:
+        async def run(self, request, *, emit):
+            await emit(PluginEvent(
+                event_type="heartbeat",
+                request_id=request.request_id,
+                metadata={
+                    "bridge": "alive",
+                    "child_process": "alive",
+                    "execution_state": "quiet",
+                    "execution_phase": "awaiting_hermes",
+                },
+            ))
+            return "completed after a quiet interval"
+
+    socket_path = str(tmp_path / "observability.sock")
+    server = HermesExtensionServer(socket_path, QuietButAliveHandler(), heartbeat_seconds=60)
+    await server.start()
+    try:
+        projection = TaskProjection()
+        service = HermesTaskService(projection=projection, executor=HermesPluginExecutor(socket_path, timeout_seconds=1))
+        task = await service.submit_task(TaskCreateRequest(prompt="observe a quiet task"), run_inline=True)
+    finally:
+        await server.close()
+
+    saved = projection.get_task(task.task_id)
+    assert saved is not None
+    assert saved.status == TaskStatus.COMPLETED
+    assert saved.last_heartbeat_at is not None
+    assert saved.execution_state == "quiet"
+    assert saved.execution_phase == "awaiting_hermes"
+    heartbeat_events = [event for event in projection.list_task_events(task.task_id) if event.event_type == "task.heartbeat"]
+    assert heartbeat_events[-1].metadata["child_process"] == "alive"
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(os.name == "nt", reason="Unix-domain extension bridge is not available on Windows")
+async def test_task_service_marks_output_quiet_but_alive_work_for_attention(tmp_path):
+    class QuietButAliveHandler:
+        async def run(self, request, *, emit):
+            await emit(PluginEvent(
+                event_type="heartbeat",
+                request_id=request.request_id,
+                metadata={"child_process": "alive", "execution_state": "quiet"},
+            ))
+            await asyncio.sleep(0.01)
+            return "completed after attention"
+
+    socket_path = str(tmp_path / "stall-observability.sock")
+    server = HermesExtensionServer(socket_path, QuietButAliveHandler(), heartbeat_seconds=60)
+    await server.start()
+    try:
+        projection = TaskProjection()
+        service = HermesTaskService(
+            projection=projection,
+            executor=HermesPluginExecutor(socket_path, timeout_seconds=1),
+            stall_after_seconds=0.000001,
+        )
+        task = await service.submit_task(TaskCreateRequest(prompt="mark a quiet task"), run_inline=True)
+    finally:
+        await server.close()
+
+    events = projection.list_task_events(task.task_id)
+    stalled = [event for event in events if event.event_type == "task.stalled"]
+    saved = projection.get_task(task.task_id)
+    assert stalled
+    assert stalled[-1].metadata["child_process"] == "alive"
+    assert saved is not None
+    assert saved.status == TaskStatus.COMPLETED
+    assert saved.execution_state == "stalled"

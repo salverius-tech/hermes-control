@@ -42,6 +42,17 @@ If the socket is not configured, set `CONTROL_API_HERMES_COMMAND` to use the CLI
 compatibility executor. The prompt is sent on stdin, stdout/stderr lines are recorded
 as live task progress, and active subprocesses are terminated when the task is canceled.
 
+## Long-running task supervision
+
+Plugin-backed tasks do not fail merely because they run for a fixed duration. The bridge
+emits heartbeats while the Hermes child process is alive, including an explicit `quiet`
+state when it has not produced new output. After `CONTROL_API_TASK_STALL_SECONDS`
+of quiet-but-alive heartbeats (600 seconds by default), the task becomes
+`attention_required` rather than failed; new output automatically returns it to `running`.
+A missing bridge heartbeat is reported as an actionable connectivity/stall error. Set
+`HERMES_CONTROL_EXTENSION_HARD_TIMEOUT_SECONDS` only when an explicit operator safety cap
+is required; leave it unset for normal activity-aware execution.
+
 ## More detail
 
 - API contract: `../../docs/API.md`

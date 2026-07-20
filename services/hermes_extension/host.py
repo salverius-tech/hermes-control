@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -40,7 +41,10 @@ class SubprocessHermesTaskHandler:
     """Run the configured Hermes CLI while preserving the structured bridge."""
 
     command: tuple[str, ...]
-    timeout_seconds: float = 900
+    # An operator may configure a hard safety cap, but it must not be the
+    # normal completion mechanism for long-running agent work.
+    timeout_seconds: float | None = None
+    heartbeat_seconds: float = 15
 
     async def run(self, request: PluginRequest, *, emit: PluginEventSink) -> str:
         command, query_mode = build_command(self.command, request)
@@ -60,6 +64,7 @@ class SubprocessHermesTaskHandler:
             process.stdin.close()
 
         completion_event = asyncio.Event()
+        started_at = time.monotonic()
 
         async def read_stream(stream: asyncio.StreamReader, *, is_stdout: bool = False) -> list[str]:
             lines: list[str] = []
@@ -80,6 +85,24 @@ class SubprocessHermesTaskHandler:
         stderr_task = asyncio.create_task(read_stream(process.stderr))
         process_wait_task = asyncio.create_task(process.wait())
         completion_wait_task = asyncio.create_task(completion_event.wait())
+
+        async def emit_process_heartbeats() -> None:
+            while process.returncode is None:
+                await asyncio.sleep(self.heartbeat_seconds)
+                if process.returncode is None:
+                    await emit(PluginEvent(
+                        event_type="heartbeat",
+                        request_id=request.request_id,
+                        metadata={
+                            "bridge": "alive",
+                            "child_process": "alive",
+                            "execution_state": "quiet",
+                            "execution_phase": "awaiting_hermes",
+                            "elapsed_seconds": round(time.monotonic() - started_at, 3),
+                        },
+                    ))
+
+        heartbeat_task = asyncio.create_task(emit_process_heartbeats())
         completed_from_footer = False
         try:
             done, _pending = await asyncio.wait(
@@ -88,7 +111,11 @@ class SubprocessHermesTaskHandler:
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if not done:
-                raise TimeoutError
+                assert self.timeout_seconds is not None
+                raise RuntimeError(
+                    f"Hermes task exceeded the configured hard execution limit "
+                    f"({self.timeout_seconds:g} seconds)"
+                )
             if completion_wait_task in done and process.returncode is None:
                 completed_from_footer = True
                 process.terminate()
@@ -105,15 +132,15 @@ class SubprocessHermesTaskHandler:
             for task in (stdout_task, stderr_task):
                 task.cancel()
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
-            for task in (process_wait_task, completion_wait_task):
+            for task in (process_wait_task, completion_wait_task, heartbeat_task):
                 task.cancel()
-            await asyncio.gather(process_wait_task, completion_wait_task, return_exceptions=True)
+            await asyncio.gather(process_wait_task, completion_wait_task, heartbeat_task, return_exceptions=True)
             raise
         finally:
-            for task in (process_wait_task, completion_wait_task):
+            for task in (process_wait_task, completion_wait_task, heartbeat_task):
                 if not task.done():
                     task.cancel()
-            await asyncio.gather(process_wait_task, completion_wait_task, return_exceptions=True)
+            await asyncio.gather(process_wait_task, completion_wait_task, heartbeat_task, return_exceptions=True)
 
         if process.returncode != 0 and not completed_from_footer:
             detail = "\n".join(stderr_lines or stdout_lines) or f"Hermes command exited with {process.returncode}"
@@ -126,4 +153,15 @@ def handler_from_environment() -> SubprocessHermesTaskHandler:
         "HERMES_CONTROL_EXTENSION_HERMES_COMMAND",
         "hermes chat --ignore-user-config --ignore-rules -q",
     )
-    return SubprocessHermesTaskHandler(tuple(shlex.split(command, posix=os.name != "nt")))
+    hard_timeout = os.getenv("HERMES_CONTROL_EXTENSION_HARD_TIMEOUT_SECONDS")
+    timeout_seconds = float(hard_timeout) if hard_timeout else None
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise ValueError("HERMES_CONTROL_EXTENSION_HARD_TIMEOUT_SECONDS must be positive when configured")
+    heartbeat_seconds = float(os.getenv("HERMES_CONTROL_EXTENSION_PROCESS_HEARTBEAT_SECONDS", "15"))
+    if heartbeat_seconds <= 0:
+        raise ValueError("HERMES_CONTROL_EXTENSION_PROCESS_HEARTBEAT_SECONDS must be positive")
+    return SubprocessHermesTaskHandler(
+        tuple(shlex.split(command, posix=os.name != "nt")),
+        timeout_seconds=timeout_seconds,
+        heartbeat_seconds=heartbeat_seconds,
+    )
