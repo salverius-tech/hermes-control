@@ -4,9 +4,10 @@ import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from services.control_api.main import create_app
-from services.control_api.managed_workspace import MANIFEST_FILENAME
+from services.control_api.managed_workspace import MANIFEST_FILENAME, ProjectManifest
 
 pytestmark = pytest.mark.integration
 
@@ -51,3 +52,20 @@ def test_workspace_origin_rejects_collisions(monkeypatch, tmp_path):
     duplicate = client.post("/projects", headers=headers, json={"name": "Garden Planner", "origin": "workspace"})
     assert duplicate.status_code == 400
     assert "workspace already exists" in duplicate.json()["detail"]
+
+
+def test_manifest_rejects_unknown_schema_extra_fields_and_unsafe_paths():
+    valid = {
+        "schema_version": 1,
+        "identity": {"slug": "control", "name": "Control", "workspace_id": "id"},
+        "workspace": {"folders": [{"path": ".", "role": "workspace", "primary": True}]},
+        "lifecycle": {"created_at": "2026-07-21T00:00:00Z", "native_registration": "registered"},
+    }
+
+    with pytest.raises(ValidationError, match="unsupported manifest schema"):
+        ProjectManifest.model_validate({**valid, "schema_version": 2})
+    with pytest.raises(ValidationError):
+        ProjectManifest.model_validate({**valid, "unexpected": True})
+    unsafe = {**valid, "workspace": {"folders": [{"path": "../outside", "role": "workspace", "primary": True}]}}
+    with pytest.raises(ValidationError, match="relative and contained"):
+        ProjectManifest.model_validate(unsafe)

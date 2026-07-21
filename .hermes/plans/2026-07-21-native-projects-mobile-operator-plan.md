@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** Proposed; implementation has not been approved.  
-> **Progress:** 7 / 31 implementation tasks complete.  
+> **Progress:** 8 / 31 implementation tasks complete.  
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -224,7 +224,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 
 - [x] **P2.1** Add explicit managed workspace-root configuration with containment/writability checks.  
   **Evidence:** configuration, diagnostics, and path-traversal/permission tests.
-- [ ] **P2.2** Define Pydantic/domain models for managed-project origin (`workspace`, `clone`, `adopt`) and manifest schema v1.  
+- [x] **P2.2** Define Pydantic/domain models for managed-project origin (`workspace`, `clone`, `adopt`) and manifest schema v1.  
   **Evidence:** schema validation tests including invalid relative paths and unknown versions.
 - [ ] **P2.3** Implement safe workspace slug allocation and atomic workspace/bootstrap file creation.  
   **Evidence:** collision, invalid slug, partial-write, and idempotence tests.
@@ -313,6 +313,7 @@ Add entries here only after running the command against the current relevant rev
 | 2026-07-21 | P1.1–P1.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 95 passed | Native projection, strict production mode, task-context validation, and diagnostics coverage. |
 | 2026-07-21 | P1.1–P1.5 | `git diff --check` | passed | No whitespace errors. |
 | 2026-07-21 | P2.1, P2.4 (partial Phase 2) | `.venv/bin/python -m pytest services/control_api/tests -q` | 97 passed | Managed workspace configuration, manifest creation, collision handling, and native registration. |
+| 2026-07-21 | P2.2 | `.venv/bin/python -m pytest services/control_api/tests -q` | 98 passed | Schema-version, extra-field, and relative-path manifest validation. |
 
 ## 10. Decision log
 

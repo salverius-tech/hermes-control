@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import ProjectCreateRequest, ProjectSummary
 from .workspace import HermesWorkspaceStore
@@ -17,6 +17,7 @@ MANIFEST_FILENAME = "hermes-project.yaml"
 
 
 class ManifestFolder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     path: str
     role: str
     primary: bool = False
@@ -31,6 +32,7 @@ class ManifestFolder(BaseModel):
 
 
 class ManifestIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     slug: str
     name: str
     description: str | None = None
@@ -38,27 +40,38 @@ class ManifestIdentity(BaseModel):
 
 
 class ManifestWorkspace(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     primary_folder: str = "."
     folders: list[ManifestFolder] = Field(default_factory=list)
 
 
 class ManifestRepository(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     path: str = "repo"
     remote_url: str | None = None
 
 
 class ManifestLifecycle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     managed_by: str = "hermes-control"
     created_at: datetime
     native_registration: str
 
 
 class ProjectManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     schema_version: int = 1
     identity: ManifestIdentity
     workspace: ManifestWorkspace
     repository: ManifestRepository | None = None
     lifecycle: ManifestLifecycle
+
+    @field_validator("schema_version")
+    @classmethod
+    def supported_schema(cls, value: int) -> int:
+        if value != 1:
+            raise ValueError(f"unsupported manifest schema version: {value}")
+        return value
 
 
 class ManagedWorkspaceStore:
@@ -82,12 +95,14 @@ class ManagedWorkspaceStore:
         if workspace.exists():
             raise ValueError(f"workspace already exists: {slug}")
 
-        workspace.mkdir()
-        (workspace / "notes").mkdir()
-        (workspace / "artifacts").mkdir()
-        (workspace / "README.md").write_text(f"# {request.name.strip()}\n", encoding="utf-8")
+        staging = self.root / f".{slug}.creating-{uuid.uuid4().hex}"
+        staging.mkdir()
+        (staging / "notes").mkdir()
+        (staging / "artifacts").mkdir()
+        (staging / "README.md").write_text(f"# {request.name.strip()}\n", encoding="utf-8")
         manifest = self._manifest(request, slug, "pending")
-        self.write_manifest(workspace, manifest)
+        self.write_manifest(staging, manifest)
+        staging.replace(workspace)
         try:
             project = self.native.create_project(request.model_copy(update={
                 "slug": slug,
