@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** In progress.
-> **Progress:** 21 / 31 implementation tasks complete.
+> **Progress:** 24 / 31 implementation tasks complete.
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -250,11 +250,11 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 
 ## Phase 4 — Reviewable recovery
 
-- [ ] **P4.1** Implement manifest discovery and validation confined to the managed workspace root.  
+- [x] **P4.1** Implement manifest discovery and validation confined to the managed workspace root.
   **Evidence:** valid, missing, malformed, duplicate-slug, and traversal fixtures.
-- [ ] **P4.2** Implement a read-only recovery-plan API that classifies entries as ready, already registered, missing repository, blocked, or conflict.  
+- [x] **P4.2** Implement a read-only recovery-plan API that classifies entries as ready, already registered, missing repository, blocked, or conflict.
   **Evidence:** no mutation during dry-run test.
-- [ ] **P4.3** Implement explicit recovery apply requiring selected-plan confirmation/revalidation.  
+- [x] **P4.3** Implement explicit recovery apply requiring selected-plan confirmation/revalidation.
   **Evidence:** confirm/cancel tests; changed manifest after plan generation is revalidated.
 - [x] **P4.4** Recreate missing native Hermes Projects with stable slug, workspace primary folder, and present optional repo folder; never overwrite existing records.
 
