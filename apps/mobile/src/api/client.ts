@@ -37,6 +37,14 @@ export type TaskEvent = {
   created_at: string;
 };
 
+export type WorkThreadSummary = {
+  root_task_id: string;
+  project_id: string;
+  attempts: TaskSummary[];
+  latest_attempt: TaskSummary;
+  latest_outcome: TaskStatus;
+};
+
 export type ProjectSummary = {
   project_id: string;
   name: string;
@@ -98,6 +106,18 @@ export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string
   }
 
   return (await response.json()) as T;
+}
+
+export async function fetchWorkThreads(
+  apiUrl: string,
+  apiToken: string,
+  options: { projectId?: string; includeArchived?: boolean } = {},
+): Promise<WorkThreadSummary[]> {
+  const query = new URLSearchParams();
+  if (options.projectId) query.set('project_id', options.projectId);
+  if (options.includeArchived) query.set('include_archived', 'true');
+  const suffix = query.size ? `?${query.toString()}` : '';
+  return apiFetch<WorkThreadSummary[]>(apiUrl, apiToken, `/work-threads${suffix}`);
 }
 
 export async function testConnection(apiUrl: string, apiToken: string): Promise<boolean> {
