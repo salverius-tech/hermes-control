@@ -315,7 +315,15 @@ def create_app() -> FastAPI:
                     recovery_audit.record(slug, "restored")
             except (RuntimeError, ValueError):
                 results.append({"slug": slug, "status": "blocked"})
+                if recovery_audit is not None:
+                    recovery_audit.record(slug, "blocked")
         return {"results": results}
+
+    @app.get("/recovery-audit", dependencies=[Depends(require_auth)])
+    def recovery_audit_timeline(slug: str | None = None, limit: int = 100) -> dict[str, list[dict[str, str]]]:
+        if recovery_audit is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Recovery audit storage is not configured")
+        return {"entries": recovery_audit.list_entries(slug=slug, limit=min(max(limit, 1), 500))}
 
     @app.get("/work-threads", response_model=list[WorkThreadSummary], dependencies=[Depends(require_auth)])
     def list_work_threads(project_id: str | None = None, include_archived: bool = False) -> list[WorkThreadSummary]:

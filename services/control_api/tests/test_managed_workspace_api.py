@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from services.control_api.git_adapter import GitCloneError
 from services.control_api.main import create_app
 from services.control_api.managed_workspace import MANIFEST_FILENAME, ProjectManifest
+from services.control_api.recovery_audit import RecoveryAuditStore
 from services.control_api.workspace import HermesWorkspaceStore
 
 pytestmark = pytest.mark.integration
@@ -31,6 +32,7 @@ def _client(monkeypatch, tmp_path):
     monkeypatch.setenv("CONTROL_API_PROJECT_ROOTS", str(root))
     monkeypatch.setenv("CONTROL_API_WORKSPACE_ROOT", str(root))
     monkeypatch.setenv("CONTROL_API_ALLOW_SYNTHETIC_PROJECTS", "0")
+    monkeypatch.setenv("CONTROL_API_DB_PATH", str(tmp_path / "control-api.db"))
     return TestClient(create_app()), root
 
 
@@ -218,3 +220,38 @@ def test_recovery_plan_is_read_only_and_reports_registered_workspace(monkeypatch
     response = client.get("/recovery-plan", headers=headers)
     assert response.status_code == 200
     assert response.json() == {"entries": [{"workspace": str(root / "recovered"), "slug": "recovered", "status": "already_registered"}]}
+
+
+def test_recovery_audit_store_persists_timeline_after_reload(tmp_path):
+    database = tmp_path / "control-api.db"
+    audit = RecoveryAuditStore(database)
+    audit.record("garden", "blocked")
+    audit.record("garden", "restored")
+    audit.record("other", "blocked")
+
+    entries = RecoveryAuditStore(database).list_entries(slug="garden")
+
+    assert [entry["status"] for entry in entries] == ["blocked", "restored"]
+    assert [entry["slug"] for entry in entries] == ["garden", "garden"]
+    assert all(entry["created_at"] for entry in entries)
+
+
+def test_recovery_audit_timeline_is_authenticated_and_reports_apply_results(monkeypatch, tmp_path):
+    client, _ = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    assert client.get("/recovery-audit").status_code == 401
+    assert client.post("/projects", headers=headers, json={"name": "Audit Garden", "origin": "workspace"}).status_code == 201
+    with sqlite3.connect(tmp_path / "hermes" / "projects.db") as db:
+        db.execute("DELETE FROM project_folders WHERE project_id IN (SELECT id FROM projects WHERE slug = ?)", ("audit-garden",))
+        db.execute("DELETE FROM projects WHERE slug = ?", ("audit-garden",))
+
+    applied = client.post("/recovery-plan/apply", headers=headers, json={"slugs": ["audit-garden"], "confirm": True})
+    timeline = client.get("/recovery-audit?slug=audit-garden", headers=headers)
+
+    assert applied.json() == {"results": [{"slug": "audit-garden", "status": "restored"}]}
+    assert timeline.status_code == 200
+    entries = timeline.json()["entries"]
+    assert len(entries) == 1
+    assert entries[0]["slug"] == "audit-garden"
+    assert entries[0]["status"] == "restored"
+    assert entries[0]["created_at"]

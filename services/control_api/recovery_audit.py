@@ -20,5 +20,20 @@ class RecoveryAuditStore:
         with self._connect() as connection:
             connection.execute("INSERT INTO recovery_audit VALUES (?, ?, ?, ?)", (datetime.now(timezone.utc).isoformat(), slug, status, json.dumps(payload)))
 
+    def list_entries(self, slug: str | None = None, limit: int = 100) -> list[dict[str, str]]:
+        """Return the public, append-only recovery timeline in creation order."""
+        query = "SELECT created_at, slug, status FROM recovery_audit"
+        parameters: tuple[str | int, ...] = ()
+        if slug is not None:
+            query += " WHERE slug = ?"
+            parameters = (slug,)
+        query += " ORDER BY created_at ASC, rowid ASC LIMIT ?"
+        with self._connect() as connection:
+            rows = connection.execute(query, (*parameters, limit)).fetchall()
+        return [
+            {"created_at": created_at, "slug": entry_slug, "status": status}
+            for created_at, entry_slug, status in rows
+        ]
+
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path)
