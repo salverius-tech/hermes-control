@@ -144,6 +144,10 @@ class ProjectCreateRequest(BaseModel):
     repository_url: str | None = None
 
 
+class RepositoryAttachRequest(BaseModel):
+    repository_url: str = Field(min_length=1)
+
+
 class ProjectUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     description: str | None = None

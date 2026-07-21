@@ -18,6 +18,7 @@ from .models import (
     FolderRequest,
     GuidanceRequest,
     ProjectCreateRequest,
+    RepositoryAttachRequest,
     ProjectSummary,
     ProjectUpdateRequest,
     SessionSummary,
@@ -380,6 +381,15 @@ def create_app() -> FastAPI:
             return synchronize_managed_project(require_workspace().update_project(project_id, request))
         except KeyError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found") from exc
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    @app.post("/projects/{project_id}/repository", dependencies=[Depends(require_auth)])
+    def attach_project_repository(project_id: str, request: RepositoryAttachRequest) -> ProjectSummary:
+        if managed_workspace is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
+        try:
+            return synchronize_managed_project(managed_workspace.attach_repository(project_id, request.repository_url))
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

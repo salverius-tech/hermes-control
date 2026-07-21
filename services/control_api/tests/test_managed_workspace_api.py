@@ -189,3 +189,23 @@ def test_clone_registration_failure_repair_preserves_repo(monkeypatch, tmp_path)
     assert repaired.status_code == 201
     workspace = root / "clone-repair"
     assert repaired.json()["folders"] == [str(workspace), str(workspace / "repo")]
+
+
+def test_attach_repository_to_workspace_project(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    assert client.post("/projects", headers=headers, json={"name": "Attach", "origin": "workspace"}).status_code == 201
+
+    def clone(_adapter, _remote, destination):
+        destination.mkdir()
+
+    monkeypatch.setattr("services.control_api.managed_workspace.GitAdapter.clone", clone)
+    response = client.post(
+        "/projects/attach/repository",
+        headers=headers,
+        json={"repository_url": "https://example.test/team/attach.git"},
+    )
+    assert response.status_code == 200
+    workspace = root / "attach"
+    assert response.json()["folders"] == [str(workspace), str(workspace / "repo")]
+    assert "remote_url: https://example.test/team/attach.git" in (workspace / MANIFEST_FILENAME).read_text()

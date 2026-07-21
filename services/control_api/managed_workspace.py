@@ -178,6 +178,27 @@ class ManagedWorkspaceStore:
         self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "registered"})}))
         return project
 
+    def attach_repository(self, project_id: str, repository_url: str) -> ProjectSummary:
+        project = self.native.get_project(project_id)
+        if project is None or not project.primary_folder:
+            raise ValueError("unknown managed project")
+        workspace = Path(project.primary_folder).resolve()
+        manifest = self.read_manifest(workspace)
+        if not workspace.is_relative_to(self.root) or manifest.repository is not None:
+            raise ValueError("project cannot accept a managed repository")
+        remote = self._repository_url(repository_url)
+        repo = workspace / "repo"
+        if repo.exists():
+            raise ValueError("repository destination already exists")
+        self.git.clone(remote, repo)
+        try:
+            project = self.native.add_folder(project_id, str(repo))
+        except Exception:
+            raise
+        manifest = manifest.model_copy(update={"repository": ManifestRepository(remote_url=remote)})
+        self.write_manifest(workspace, manifest)
+        return project
+
     def write_manifest(self, workspace: str | Path, manifest: ProjectManifest) -> None:
         workspace_path = Path(workspace).resolve()
         if not workspace_path.is_relative_to(self.root):
