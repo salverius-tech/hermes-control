@@ -310,6 +310,8 @@ def create_app() -> FastAPI:
             try:
                 require_workspace().create_project(ProjectCreateRequest(name=manifest.identity.name, slug=slug, description=manifest.identity.description, folders=folders, primary_folder=str(workspace_path)))
                 results.append({"slug": slug, "status": "restored"})
+                if recovery_audit is not None:
+                    recovery_audit.record(slug, "restored")
             except (RuntimeError, ValueError):
                 results.append({"slug": slug, "status": "blocked"})
         return {"results": results}
