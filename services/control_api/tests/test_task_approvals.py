@@ -47,6 +47,36 @@ def test_approve_task_moves_approval_required_task_to_queue(monkeypatch):
     assert "task.approved" in [event["event_type"] for event in events]
 
 
+def test_approval_audit_metadata_survives_sqlite_reload(monkeypatch, tmp_path):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    monkeypatch.setenv("CONTROL_API_DB_PATH", str(tmp_path / "tasks.db"))
+    headers = auth_headers()
+    first_client = TestClient(create_app())
+    task = first_client.post(
+        "/tasks",
+        headers=headers,
+        json={"prompt": "Approve the durable audit", "requires_approval": True},
+    ).json()
+
+    response = first_client.post(
+        f"/tasks/{task['task_id']}/approve",
+        headers=headers,
+        json={"actor": "operator", "device_id": "phone-1", "reason": "Reviewed on mobile"},
+    )
+
+    assert response.status_code == 200
+    reloaded_events = TestClient(create_app()).get(f"/tasks/{task['task_id']}/events", headers=headers)
+    assert reloaded_events.status_code == 200
+    audit = next(event for event in reloaded_events.json() if event["event_type"] == "approval.audit")
+    assert audit["status"] == "queued"
+    assert audit["message"] == "Reviewed on mobile"
+    assert audit["metadata"] == {
+        "actor": "operator",
+        "device_id": "phone-1",
+        "reason": "Reviewed on mobile",
+    }
+
+
 def test_reject_task_records_rejection(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())

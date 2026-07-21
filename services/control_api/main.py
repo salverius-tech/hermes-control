@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket,
 
 from .auth import expected_token, require_auth
 from .hermes_client import HermesTaskService
-from .managed_workspace import ManagedWorkspaceStore
+from .managed_workspace import ManagedWorkspaceStore, ProjectManifest
 from .models import (
     AgentStatus,
     ApprovalRequest,
@@ -385,26 +385,64 @@ def create_app() -> FastAPI:
     def list_attention() -> list[TaskSummary]:
         return [task for task in projection.list_tasks() if task.status in {"awaiting_approval", "attention_required", "failed", "blocked"}]
 
-    @app.post("/recovery-plan/apply", dependencies=[Depends(require_auth)])
-    def apply_recovery_plan(request: RecoveryApplyRequest) -> dict[str, list[dict[str, str]]]:
+    def recovery_plan_entries() -> list[tuple[dict[str, str], Path | None, ProjectManifest | None]]:
+        """Freshly classify discovery results for both review and destructive apply."""
         if managed_workspace is None:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
-        manifests = {manifest.identity.slug: (path, manifest) for path, manifest, error in managed_workspace.discover_manifests() if manifest is not None and error is None}
+        native_workspace = require_workspace()
+        entries: list[tuple[dict[str, str], Path | None, ProjectManifest | None]] = []
+        slug_counts: dict[str, int] = {}
+        for workspace_path, manifest, error in managed_workspace.discover_manifests():
+            if error is not None:
+                entries.append(({"workspace": str(workspace_path), "status": "blocked", "detail": error}, None, None))
+                continue
+            assert manifest is not None
+            slug_counts[manifest.identity.slug] = slug_counts.get(manifest.identity.slug, 0) + 1
+            entry = {"workspace": str(workspace_path), "slug": manifest.identity.slug}
+            try:
+                repository = managed_workspace.repository_directory(workspace_path, manifest)
+            except ValueError as exc:
+                entries.append(({**entry, "status": "blocked", "detail": str(exc)}, workspace_path, manifest))
+                continue
+            registered = native_workspace.get_project(manifest.identity.slug)
+            if repository is not None and not repository.is_dir():
+                status_name = "missing_repository"
+            elif registered and Path(registered.primary_folder or "").resolve() != workspace_path:
+                status_name = "conflict"
+            else:
+                status_name = "already_registered" if registered else "ready"
+            entries.append(({**entry, "status": status_name}, workspace_path, manifest))
+        return [
+            (({**entry, "status": "conflict"} if entry.get("slug") and slug_counts[entry["slug"]] > 1 else entry), path, manifest)
+            for entry, path, manifest in entries
+        ]
+
+    @app.post("/recovery-plan/apply", dependencies=[Depends(require_auth)])
+    def apply_recovery_plan(request: RecoveryApplyRequest) -> dict[str, list[dict[str, str]]]:
+        # Do not trust a prior plan: rebuild all classifications immediately before
+        # each creation so changed, duplicate, missing, or conflicting descriptors
+        # cannot be applied.
+        entries = recovery_plan_entries()
+        assert managed_workspace is not None
         results = []
         for slug in request.slugs:
-            entry = manifests.get(slug)
-            if entry is None or require_workspace().get_project(slug) is not None:
+            selected = [(entry, path, manifest) for entry, path, manifest in entries if entry.get("slug") == slug and entry["status"] == "ready"]
+            if len(selected) != 1:
                 results.append({"slug": slug, "status": "blocked"})
                 if recovery_audit is not None:
                     recovery_audit.record(slug, "blocked")
                 continue
-            workspace_path, manifest = entry
+            _, workspace_path, manifest = selected[0]
+            assert workspace_path is not None and manifest is not None
             folders = [str(workspace_path)]
             repository = managed_workspace.repository_directory(workspace_path, manifest)
             if repository is not None and repository.is_dir():
                 folders.append(str(repository))
             try:
                 require_workspace().create_project(ProjectCreateRequest(name=manifest.identity.name, slug=slug, description=manifest.identity.description, folders=folders, primary_folder=str(workspace_path)))
+                managed_workspace.write_manifest(workspace_path, manifest.model_copy(update={
+                    "lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "registered"})
+                }))
                 results.append({"slug": slug, "status": "restored"})
                 if recovery_audit is not None:
                     recovery_audit.record(slug, "restored")
@@ -433,28 +471,7 @@ def create_app() -> FastAPI:
 
     @app.get("/recovery-plan", dependencies=[Depends(require_auth)])
     def recovery_plan() -> dict[str, list[dict[str, str]]]:
-        if managed_workspace is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
-        entries = []
-        for workspace_path, manifest, error in managed_workspace.discover_manifests():
-            if error is not None:
-                entries.append({"workspace": str(workspace_path), "status": "blocked", "detail": error})
-                continue
-            assert manifest is not None
-            registered = require_workspace().get_project(manifest.identity.slug)
-            repository = managed_workspace.repository_directory(workspace_path, manifest)
-            if repository is not None and not repository.is_dir():
-                state = "missing_repository"
-            elif registered and Path(registered.primary_folder or "").resolve() != workspace_path:
-                state = "conflict"
-            else:
-                state = "already_registered" if registered else "ready"
-            entries.append({
-                "workspace": str(workspace_path),
-                "slug": manifest.identity.slug,
-                "status": state,
-            })
-        return {"entries": entries}
+        return {"entries": [entry for entry, _, _ in recovery_plan_entries()]}
 
     @app.get("/projects", dependencies=[Depends(require_auth)])
     def list_projects(include_archived: bool = False) -> list[ProjectSummary]:

@@ -187,18 +187,25 @@ class ManagedWorkspaceStore:
         return project
 
     def discover_manifests(self) -> list[tuple[Path, ProjectManifest | None, str | None]]:
-        """Read only direct managed-workspace manifests; never follows external paths."""
+        """Read-only direct-child recovery discovery, including unusable workspaces."""
         if not self.root.is_dir():
             return []
         discovered = []
-        for manifest_path in sorted(self.root.glob(f"*/{MANIFEST_FILENAME}")):
-            workspace = manifest_path.parent.resolve()
+        for candidate in sorted(self.root.iterdir(), key=lambda path: path.name):
+            if not candidate.is_dir():
+                continue
             try:
+                workspace = candidate.resolve()
                 if not workspace.is_relative_to(self.root):
-                    continue
+                    raise ValueError("workspace is outside the managed workspace root")
+                manifest_path = workspace / MANIFEST_FILENAME
+                if not manifest_path.is_file():
+                    raise ValueError("recovery manifest is missing")
                 discovered.append((workspace, self.read_manifest(workspace), None))
             except (OSError, ValueError, ValidationError) as exc:
-                discovered.append((workspace, None, str(exc)))
+                # Preserve the direct-child path for a useful, non-following plan
+                # entry if resolving a symlink shows it leaves the managed root.
+                discovered.append((candidate, None, str(exc)))
         return discovered
 
     @staticmethod

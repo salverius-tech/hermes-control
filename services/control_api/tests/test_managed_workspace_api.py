@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -35,6 +36,18 @@ def _client(monkeypatch, tmp_path):
     monkeypatch.setenv("CONTROL_API_ALLOW_SYNTHETIC_PROJECTS", "0")
     monkeypatch.setenv("CONTROL_API_DB_PATH", str(tmp_path / "control-api.db"))
     return TestClient(create_app()), root
+
+
+def _write_recovery_manifest(workspace: Path, slug: str, *, repository_path: str | None = None) -> None:
+    manifest = {
+        "schema_version": 1,
+        "identity": {"slug": slug, "name": slug.title(), "workspace_id": f"workspace-{slug}"},
+        "workspace": {"folders": [{"path": ".", "role": "workspace", "primary": True}]},
+        "lifecycle": {"created_at": "2026-07-21T00:00:00Z", "native_registration": "registered"},
+    }
+    if repository_path is not None:
+        manifest["repository"] = {"path": repository_path}
+    (workspace / MANIFEST_FILENAME).write_text(yaml.safe_dump(manifest), encoding="utf-8")
 
 
 def test_workspace_origin_creates_native_project_and_recovery_manifest(monkeypatch, tmp_path):
@@ -214,13 +227,63 @@ def test_attach_repository_to_workspace_project(monkeypatch, tmp_path):
     assert "remote_url: https://example.test/team/attach.git" in (workspace / MANIFEST_FILENAME).read_text()
 
 
+def test_recovery_plan_discovery_classifies_missing_malformed_and_traversal(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    (root / "missing").mkdir()
+    malformed = root / "malformed"
+    malformed.mkdir()
+    (malformed / MANIFEST_FILENAME).write_text("schema_version: 2\n", encoding="utf-8")
+    traversal = root / "traversal"
+    traversal.mkdir()
+    _write_recovery_manifest(traversal, "traversal", repository_path="../outside")
+
+    response = client.get("/recovery-plan", headers={"Authorization": "Bearer dev-token"})
+
+    assert response.status_code == 200
+    entries = {entry["workspace"]: entry for entry in response.json()["entries"]}
+    assert entries[str(root / "missing")]["status"] == "blocked"
+    assert "manifest is missing" in entries[str(root / "missing")]["detail"]
+    assert entries[str(malformed)]["status"] == "blocked"
+    assert "unsupported manifest schema version" in entries[str(malformed)]["detail"]
+    assert entries[str(traversal)]["status"] == "blocked"
+    assert "relative and contained" in entries[str(traversal)]["detail"]
+
+
+def test_recovery_plan_classifies_duplicate_slugs_and_native_primary_conflicts(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    for name in ("Duplicate One", "Duplicate Two"):
+        workspace = root / name.lower().replace(" ", "-")
+        workspace.mkdir()
+        _write_recovery_manifest(workspace, "duplicate")
+    assert client.post("/projects", headers=headers, json={"name": "Conflict", "origin": "workspace"}).status_code == 201
+    alternate = root / "alternate"
+    alternate.mkdir()
+    with sqlite3.connect(tmp_path / "hermes" / "projects.db") as db:
+        db.execute("UPDATE projects SET primary_path = ? WHERE slug = ?", (str(alternate), "conflict"))
+
+    response = client.get("/recovery-plan", headers=headers)
+
+    entries = response.json()["entries"]
+    duplicates = [entry for entry in entries if entry.get("slug") == "duplicate"]
+    assert len(duplicates) == 2
+    assert {entry["status"] for entry in duplicates} == {"conflict"}
+    assert next(entry for entry in entries if entry.get("slug") == "conflict")["status"] == "conflict"
+
+
 def test_recovery_plan_is_read_only_and_reports_registered_workspace(monkeypatch, tmp_path):
     client, root = _client(monkeypatch, tmp_path)
     headers = {"Authorization": "Bearer dev-token"}
     assert client.post("/projects", headers=headers, json={"name": "Recovered", "origin": "workspace"}).status_code == 201
+    database = tmp_path / "hermes" / "projects.db"
+    manifest = root / "recovered" / MANIFEST_FILENAME
+    before_database = database.read_bytes()
+    before_manifest = manifest.read_bytes()
     response = client.get("/recovery-plan", headers=headers)
     assert response.status_code == 200
     assert response.json() == {"entries": [{"workspace": str(root / "recovered"), "slug": "recovered", "status": "already_registered"}]}
+    assert database.read_bytes() == before_database
+    assert manifest.read_bytes() == before_manifest
 
 
 def test_recovery_plan_reports_malformed_manifest_as_blocked(monkeypatch, tmp_path):
@@ -266,8 +329,10 @@ def test_recovery_plan_reports_declared_repository_missing_directory(monkeypatch
 @pytest.mark.parametrize("payload", [
     {"slugs": ["confirmation"]},
     {"slugs": ["confirmation"], "confirm": False},
+    {"slugs": ["confirmation"], "confirm": 1},
+    {"slugs": ["confirmation"], "confirm": "true"},
 ])
-def test_recovery_apply_requires_explicit_true_confirmation(monkeypatch, tmp_path, payload):
+def test_recovery_apply_requires_literal_true_confirmation_and_rejects_cancel(monkeypatch, tmp_path, payload):
     client, root = _client(monkeypatch, tmp_path)
     headers = {"Authorization": "Bearer dev-token"}
     assert client.post("/projects", headers=headers, json={"name": "Confirmation", "origin": "workspace"}).status_code == 201
@@ -280,6 +345,25 @@ def test_recovery_apply_requires_explicit_true_confirmation(monkeypatch, tmp_pat
     assert response.status_code == 422
     assert HermesWorkspaceStore(tmp_path / "hermes").get_project("confirmation") is None
     assert (root / "confirmation").is_dir()
+
+
+def test_recovery_apply_revalidates_changed_manifest_before_creating(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    assert client.post("/projects", headers=headers, json={"name": "Changed", "origin": "workspace"}).status_code == 201
+    with sqlite3.connect(tmp_path / "hermes" / "projects.db") as db:
+        db.execute("DELETE FROM project_folders WHERE project_id IN (SELECT id FROM projects WHERE slug = ?)", ("changed",))
+        db.execute("DELETE FROM projects WHERE slug = ?", ("changed",))
+    assert client.get("/recovery-plan", headers=headers).json()["entries"][0]["status"] == "ready"
+    manifest_path = root / "changed" / MANIFEST_FILENAME
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["repository"] = {"path": "../outside"}
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    response = client.post("/recovery-plan/apply", headers=headers, json={"slugs": ["changed"], "confirm": True})
+
+    assert response.json() == {"results": [{"slug": "changed", "status": "blocked"}]}
+    assert HermesWorkspaceStore(tmp_path / "hermes").get_project("changed") is None
 
 
 def test_recovery_apply_revalidates_native_registration_before_creating(monkeypatch, tmp_path):

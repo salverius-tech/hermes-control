@@ -161,7 +161,15 @@ class RepositoryAttachRequest(BaseModel):
 
 class RecoveryApplyRequest(BaseModel):
     slugs: list[str] = Field(min_length=1)
-    confirm: Literal[True]
+    confirm: bool
+
+    @field_validator("confirm", mode="before")
+    @classmethod
+    def confirm_must_be_literal_true(cls, value: object) -> bool:
+        """Require the JSON boolean `true`, not a truthy/coerced substitute."""
+        if type(value) is not bool or value is not True:
+            raise ValueError("confirm must be the literal boolean true")
+        return value
 
 
 class ProjectUpdateRequest(BaseModel):
