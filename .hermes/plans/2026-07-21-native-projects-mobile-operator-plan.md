@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** Proposed; implementation has not been approved.  
-> **Progress:** 16 / 31 implementation tasks complete.  
+> **Progress:** 17 / 31 implementation tasks complete.
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -263,7 +263,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 
 ## Phase 5 — Work-thread projection and task recovery
 
-- [ ] **P5.1** Define a work-thread read model grouping root task and linked retries/continuations/follow-ups.  
+- [x] **P5.1** Define a work-thread read model grouping root task and linked retries/continuations/follow-ups.
   **Evidence:** lineage projection tests across persisted reload.
 - [ ] **P5.2** Add latest-attempt/latest-outcome semantics and visible historical-to-latest links.  
   **Evidence:** API and mobile filtering tests for failed-then-completed lineage.
@@ -317,6 +317,8 @@ Add entries here only after running the command against the current relevant rev
 | 2026-07-21 | P2.3 | `.venv/bin/python -m pytest services/control_api/tests -q` | 99 passed | Collision, staged workspace creation, and recoverable native-registration failure handling. |
 | 2026-07-21 | P2.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 100 passed | Managed-manifest edit/archive synchronization. |
 | 2026-07-21 | P2.6 | `.venv/bin/python -m pytest services/control_api/tests -q` | 100 passed | Failed native registration is repairable by reissuing the workspace-create request. |
+| 2026-07-21 | P3.1–P3.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 105 passed | Managed repository lifecycle, clone failure repair, and repository attachment coverage. |
+| 2026-07-21 | P5.1 | `.venv/bin/python -m pytest services/control_api/tests -q` | 109 passed | Work-thread projection, read APIs, root/retry latest-outcome behavior, and SQLite reload lineage coverage. |
 
 ## 10. Decision log
 
