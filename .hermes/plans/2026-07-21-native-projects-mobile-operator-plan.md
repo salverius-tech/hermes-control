@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** Proposed; implementation has not been approved.  
-> **Progress:** 11 / 31 implementation tasks complete.  
+> **Progress:** 15 / 31 implementation tasks complete.  
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -237,13 +237,13 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 
 ## Phase 3 — Repository lifecycle
 
-- [ ] **P3.1** Add server-side Git adapter with argument-array execution, bounded output, timeout/cancellation, and sanitized diagnostics.  
+- [x] **P3.1** Add server-side Git adapter with argument-array execution, bounded output, timeout/cancellation, and sanitized diagnostics.  
   **Evidence:** adapter unit tests; no shell execution path.
-- [ ] **P3.2** Implement clone-backed project creation: bootstrap workspace, clone to `repo/`, register workspace primary plus repo folder, verify, update manifest.  
+- [x] **P3.2** Implement clone-backed project creation: bootstrap workspace, clone to `repo/`, register workspace primary plus repo folder, verify, update manifest.  
   **Evidence:** end-to-end clone fixture test.
-- [ ] **P3.3** Reject unsafe URLs, non-empty destinations, path collisions, and unauthorized/unavailable Git authentication cleanly.  
+- [x] **P3.3** Reject unsafe URLs, non-empty destinations, path collisions, and unauthorized/unavailable Git authentication cleanly.  
   **Evidence:** negative tests and sanitized error assertions.
-- [ ] **P3.4** Preserve successfully cloned files when later native registration fails; mark repairable state and expose an explicit repair action.  
+- [x] **P3.4** Preserve successfully cloned files when later native registration fails; mark repairable state and expose an explicit repair action.  
   **Evidence:** partial-failure integration test.
 - [ ] **P3.5** Support attaching/cloning a repository into an existing workspace-only project.  
   **Evidence:** API/manifest/native-folder synchronization tests.
