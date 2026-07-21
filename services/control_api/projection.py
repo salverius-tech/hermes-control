@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskExecutionState, TaskStatus, TaskSummary
+from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskExecutionState, TaskStatus, TaskSummary, WorkThreadSummary
 from .storage import TaskStore
 from .workspace import HermesWorkspaceStore
 
@@ -71,6 +71,18 @@ class TaskProjection:
     def list_tasks(self, *, include_archived: bool = False) -> list[TaskSummary]:
         tasks = self._tasks.values() if include_archived else (task for task in self._tasks.values() if task.archived_at is None)
         return sorted(tasks, key=lambda task: task.created_at, reverse=True)
+
+    def list_work_threads(self, *, project_id: str | None = None, include_archived: bool = False) -> list[WorkThreadSummary]:
+        groups: dict[str, list[TaskSummary]] = defaultdict(list)
+        for task in self.list_tasks(include_archived=include_archived):
+            if project_id is None or task.project_id == project_id:
+                groups[task.root_task_id or task.task_id].append(task)
+        threads = []
+        for root, attempts in groups.items():
+            attempts.sort(key=lambda task: (task.created_at, task.task_id))
+            latest = attempts[-1]
+            threads.append(WorkThreadSummary(root_task_id=root, project_id=latest.project_id, attempts=attempts, latest_attempt=latest, latest_outcome=TaskStatus(latest.status)))
+        return sorted(threads, key=lambda thread: thread.latest_attempt.created_at, reverse=True)
 
     def get_task(self, task_id: str) -> TaskSummary | None:
         return self._tasks.get(task_id)

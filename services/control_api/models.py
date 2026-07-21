@@ -90,6 +90,14 @@ class TaskSummary(BaseModel):
     execution_detail: str | None = None
 
 
+class WorkThreadSummary(BaseModel):
+    root_task_id: str
+    project_id: str
+    attempts: list[TaskSummary]
+    latest_attempt: TaskSummary
+    latest_outcome: TaskStatus
+
+
 class TaskEvent(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
