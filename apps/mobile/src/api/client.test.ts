@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { fetchRecoveryPlan, fetchWorkThreads, testConnection } from './client';
+import { createProject, fetchRecoveryPlan, fetchWorkThreads, testConnection } from './client';
 
 const workThread = {
   attempts: [],
@@ -46,6 +46,28 @@ describe('fetchRecoveryPlan', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchRecoveryPlan('http://localhost:8787', 'test-token')).resolves.toEqual(plan);
+  });
+});
+
+describe('createProject', () => {
+  it('posts the validated source-specific request to the native project endpoint', async () => {
+    const created = { project_id: 'garden', name: 'Garden', folders: [], archived: false };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('http://localhost:8787/projects');
+      expect(init).toMatchObject({
+        body: JSON.stringify({ name: 'Garden', origin: 'clone', repository_url: 'https://example.test/team/garden.git' }),
+        headers: { Authorization: 'Bearer test-token' },
+        method: 'POST',
+      });
+      return new Response(JSON.stringify(created), { status: 201 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createProject('http://localhost:8787', 'test-token', {
+      name: 'Garden',
+      origin: 'clone',
+      repository_url: 'https://example.test/team/garden.git',
+    })).resolves.toEqual(created);
   });
 });
 

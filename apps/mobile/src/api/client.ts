@@ -1,6 +1,6 @@
 import { buildApiUrl } from './url';
 
-export type TaskStatus = 'awaiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'rejected' | 'blocked';
+export type TaskStatus = 'awaiting_approval' | 'queued' | 'running' | 'attention_required' | 'completed' | 'failed' | 'canceled' | 'rejected' | 'blocked';
 export type TaskRelation = 'original' | 'retry' | 'edited_retry' | 'continuation' | 'follow_up';
 
 export type TaskSummary = {
@@ -56,6 +56,19 @@ export type ProjectSummary = {
   running_count: number;
   completed_count: number;
   failed_count: number;
+};
+
+/** Mirrors the Control API's native-project creation contract. */
+export type ProjectOrigin = 'adopt' | 'workspace' | 'clone';
+
+export type ProjectCreateRequest = {
+  name: string;
+  description?: string;
+  origin: ProjectOrigin;
+  /** Required for adopt; this becomes the native project primary folder. */
+  folders?: string[];
+  /** Required for clone; the Control API clones it into the managed workspace. */
+  repository_url?: string;
 };
 
 export type SessionSummary = {
@@ -119,6 +132,17 @@ export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string
   }
 
   return (await response.json()) as T;
+}
+
+export async function createProject(
+  apiUrl: string,
+  apiToken: string,
+  request: ProjectCreateRequest,
+): Promise<ProjectSummary> {
+  return apiFetch<ProjectSummary>(apiUrl, apiToken, '/projects', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
 }
 
 export async function fetchWorkThreads(
