@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -138,3 +139,32 @@ def test_clone_origin_clones_before_native_registration(monkeypatch, tmp_path):
     assert "remote_url: https://example.test/team/remote.git" in (workspace / MANIFEST_FILENAME).read_text()
     assert "repository_clone: cloned" in (workspace / MANIFEST_FILENAME).read_text()
     assert response.json()["folders"] == [str(workspace), str(workspace / "repo")]
+
+
+def test_clone_origin_rejects_unsafe_url_without_creating_workspace(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    response = client.post(
+        "/projects",
+        headers={"Authorization": "Bearer dev-token"},
+        json={"name": "Unsafe", "origin": "clone", "repository_url": "file:///tmp/repository.git"},
+    )
+    assert response.status_code == 400
+    assert not (root / "unsafe").exists()
+
+
+def test_clone_failure_preserves_workspace_state(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+
+    def fail_clone(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(128, ["git", "clone"])
+
+    monkeypatch.setattr("services.control_api.managed_workspace.subprocess.run", fail_clone)
+    response = client.post(
+        "/projects",
+        headers={"Authorization": "Bearer dev-token"},
+        json={"name": "Broken Remote", "origin": "clone", "repository_url": "https://example.test/team/broken.git"},
+    )
+    assert response.status_code == 400
+    manifest = (root / "broken-remote" / MANIFEST_FILENAME).read_text()
+    assert "repository_clone: clone_failed" in manifest
+    assert "native_registration: pending" in manifest
