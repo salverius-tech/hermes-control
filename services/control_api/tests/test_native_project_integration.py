@@ -44,6 +44,19 @@ def _initialize_native_projects(home, workspace):
         )
 
 
+def _add_native_session(home, session_id, cwd, *, archived=False):
+    with sqlite3.connect(home / "state.db") as db:
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS sessions ("
+            "id TEXT PRIMARY KEY, title TEXT, source TEXT, started_at INTEGER, ended_at INTEGER, "
+            "cwd TEXT, parent_session_id TEXT, archived INTEGER NOT NULL DEFAULT 0)"
+        )
+        db.execute(
+            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, "Native session", "cli", 1, 1, str(cwd), None, int(archived)),
+        )
+
+
 def _client(monkeypatch, tmp_path):
     home = tmp_path / "hermes-home"
     home.mkdir()
@@ -99,3 +112,60 @@ def test_strict_native_mode_rejects_unknown_project_and_outside_execution_folder
 
     assert unknown.status_code == 400
     assert outside.status_code == 400
+
+
+def test_retry_validates_native_session_and_uses_its_working_directory(monkeypatch, tmp_path):
+    client, workspace = _client(monkeypatch, tmp_path)
+    home = tmp_path / "hermes-home"
+    session_workspace = workspace / "nested-session"
+    session_workspace.mkdir()
+    _add_native_session(home, "session-retry", session_workspace)
+    headers = {"Authorization": "Bearer dev-token"}
+
+    created = client.post(
+        "/tasks",
+        headers=headers,
+        json={"prompt": "Resume this native task", "project_id": "control", "session_id": "session-retry"},
+    )
+    retried = client.post(f"/tasks/{created.json()['task_id']}/retry", headers=headers)
+    continuation = client.post(
+        f"/tasks/{created.json()['task_id']}/continue",
+        headers=headers,
+        json={"prompt": "Continue native work"},
+    )
+
+    assert created.status_code == 201
+    assert created.json()["execution_folder"] == str(session_workspace)
+    assert retried.status_code == 201
+    assert retried.json()["session_id"] == "session-retry"
+    assert retried.json()["execution_folder"] == str(session_workspace)
+    assert continuation.status_code == 201
+    assert continuation.json()["session_id"] == "session-retry"
+    assert continuation.json()["execution_folder"] == str(session_workspace)
+
+
+def test_retry_and_continuation_reject_stale_native_session_ids(monkeypatch, tmp_path):
+    client, workspace = _client(monkeypatch, tmp_path)
+    home = tmp_path / "hermes-home"
+    _add_native_session(home, "session-stale", workspace)
+    headers = {"Authorization": "Bearer dev-token"}
+    created = client.post(
+        "/tasks",
+        headers=headers,
+        json={"prompt": "A task with a native session", "project_id": "control", "session_id": "session-stale"},
+    )
+    with sqlite3.connect(home / "state.db") as db:
+        db.execute("UPDATE sessions SET archived = 1 WHERE id = ?", ("session-stale",))
+
+    retry = client.post(f"/tasks/{created.json()['task_id']}/retry", headers=headers)
+    continuation = client.post(
+        f"/tasks/{created.json()['task_id']}/continue",
+        headers=headers,
+        json={"prompt": "Continue the stale session"},
+    )
+
+    assert created.status_code == 201
+    assert retry.status_code == 400
+    assert continuation.status_code == 400
+    assert "session is not valid for project" in retry.json()["detail"]
+    assert "session is not valid for project" in continuation.json()["detail"]

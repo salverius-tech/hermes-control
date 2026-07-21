@@ -190,7 +190,8 @@ class HermesWorkspaceStore:
             raise ValueError("execution folder is not part of the selected Hermes project")
         return resolved
 
-    def validate_session(self, session_id: str, project_id: str) -> None:
+    def validate_session(self, session_id: str, project_id: str) -> str:
+        """Return the validated native working directory for a resumable session."""
         if not self.state_path.exists():
             raise ValueError(f"Hermes session not found: {session_id}")
         project = self.get_project(project_id)
@@ -200,6 +201,10 @@ class HermesWorkspaceStore:
             row = db.execute("SELECT cwd, archived FROM sessions WHERE id = ?", (session_id,)).fetchone()
         if row is None or row[1] or not any(_is_within(row[0], folder) for folder in project.folders):
             raise ValueError(f"Hermes session is not valid for project: {session_id}")
+        try:
+            return self.validate_project_execution_folder(project_id, row[0])
+        except ValueError as exc:
+            raise ValueError(f"Hermes session is not valid for project: {session_id}") from exc
 
     def _get_row(self, project_id: str) -> tuple | None:
         with sqlite3.connect(self.projects_path) as db:

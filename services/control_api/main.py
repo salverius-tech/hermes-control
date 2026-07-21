@@ -123,7 +123,13 @@ def create_app() -> FastAPI:
                 else native_workspace.validate_project_execution_folder(request.project_id, project.primary_folder)
             )
             if request.session_id:
-                native_workspace.validate_session(request.session_id, request.project_id)
+                # A resumed Hermes session owns its cwd.  Do not resume it from
+                # another folder in the same project, which can silently change
+                # the context seen by Hermes.
+                session_folder = native_workspace.validate_session(request.session_id, request.project_id)
+                if request.execution_folder and execution_folder != session_folder:
+                    raise ValueError("execution folder does not match the Hermes session working directory")
+                execution_folder = session_folder
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         return request.model_copy(update={"execution_folder": execution_folder})
