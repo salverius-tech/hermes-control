@@ -32,6 +32,7 @@ from .projection import TaskProjection, TaskStateError
 from .rate_limit import RateLimiter
 from .storage import SQLiteTaskStore
 from .websocket import ConnectionManager
+from .recovery_audit import RecoveryAuditStore
 from .workspace import HermesWorkspaceStore
 
 
@@ -39,6 +40,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Hermes Mobile Control API", version="0.1.0")
     store_path = os.getenv("CONTROL_API_DB_PATH")
     store = SQLiteTaskStore(store_path) if store_path else None
+    recovery_audit = RecoveryAuditStore(store_path) if store_path else None
     hermes_home = os.getenv("CONTROL_API_HERMES_HOME")
     allow_synthetic_projects = os.getenv("CONTROL_API_ALLOW_SYNTHETIC_PROJECTS") == "1"
     workspace = HermesWorkspaceStore(hermes_home) if hermes_home else None
@@ -298,6 +300,8 @@ def create_app() -> FastAPI:
             entry = manifests.get(slug)
             if entry is None or require_workspace().get_project(slug) is not None:
                 results.append({"slug": slug, "status": "blocked"})
+                if recovery_audit is not None:
+                    recovery_audit.record(slug, "blocked")
                 continue
             workspace_path, manifest = entry
             folders = [str(workspace_path)]
