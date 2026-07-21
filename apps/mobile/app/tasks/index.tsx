@@ -16,6 +16,7 @@ export default function TasksScreen() {
   const { apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
   const tasks = useDataStore((state) => state.tasks);
+  const workThreads = useDataStore((state) => state.workThreads);
   const queuedTasks = useDataStore((state) => state.queuedTasks);
   const refresh = useDataStore((state) => state.refresh);
   const offline = useDataStore((state) => state.offline);
@@ -39,6 +40,10 @@ export default function TasksScreen() {
   }, [apiToken, refresh]);
 
   const visibleTasks = useMemo(() => filterTasks(tasks, filter, query), [filter, query, tasks]);
+  const visibleThreads = useMemo(() => {
+    const visibleIds = new Set(visibleTasks.map((task) => task.task_id));
+    return workThreads.filter((thread) => visibleIds.has(thread.latest_attempt.task_id));
+  }, [visibleTasks, workThreads]);
 
   return (
     <ScrollView refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={() => void loadTasks(true)} refreshing={refreshing} />} contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
@@ -61,16 +66,19 @@ export default function TasksScreen() {
           </View>
         </View>
       ))}
-      {visibleTasks.length === 0 && !loading ? <Text style={styles.muted}>{filter === 'inbox' ? 'No work needs your attention right now.' : 'No tasks in this view.'}</Text> : null}
-      {visibleTasks.map((task) => (
-        <Link key={task.task_id} href={`/tasks/${task.task_id}`} asChild>
+      {visibleThreads.length === 0 && !loading ? <Text style={styles.muted}>{filter === 'inbox' ? 'No work needs your attention right now.' : 'No tasks in this view.'}</Text> : null}
+      {visibleThreads.map((thread) => {
+        const task = thread.latest_attempt;
+        return (
+        <Link key={thread.root_task_id} href={`/tasks/${task.task_id}`} asChild>
           <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
             <View style={styles.cardTop}><Text style={styles.title} numberOfLines={2}>{task.title}</Text><StatusPill status={task.status} /></View>
             <Text style={styles.prompt} numberOfLines={3}>{task.prompt}</Text>
-            <Text style={styles.meta}>{task.project_id} · {task.relation || 'original'} · {new Date(task.updated_at).toLocaleString()}</Text>
+            <Text style={styles.meta}>{task.project_id} · {thread.attempts.length} attempt{thread.attempts.length === 1 ? '' : 's'} · {new Date(task.updated_at).toLocaleString()}</Text>
           </Pressable>
         </Link>
-      ))}
+        );
+      })}
     </ScrollView>
   );
 }
