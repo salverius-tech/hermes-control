@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { filterTasks, taskFilters, type TaskFilter } from '@/features/tasks/filters';
+import { filterActivityThreads } from '@/features/tasks/activity-search';
+import { taskFilters, type TaskFilter } from '@/features/tasks/filters';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { StatusPill } from '@/components/StatusPill';
 import { useDataStore } from '@/state/data-store';
@@ -15,7 +16,6 @@ import { colors, spacing } from '@/theme/tokens';
 export default function TasksScreen() {
   const { apiToken } = useSettingsStore();
   const insets = useSafeAreaInsets();
-  const tasks = useDataStore((state) => state.tasks);
   const workThreads = useDataStore((state) => state.workThreads);
   const queuedTasks = useDataStore((state) => state.queuedTasks);
   const refresh = useDataStore((state) => state.refresh);
@@ -39,17 +39,13 @@ export default function TasksScreen() {
     return () => clearInterval(interval);
   }, [apiToken, refresh]);
 
-  const visibleTasks = useMemo(() => filterTasks(tasks, filter, query), [filter, query, tasks]);
-  const visibleThreads = useMemo(() => {
-    const visibleIds = new Set(visibleTasks.map((task) => task.task_id));
-    return workThreads.filter((thread) => visibleIds.has(thread.latest_attempt.task_id));
-  }, [visibleTasks, workThreads]);
+  const visibleThreads = useMemo(() => filterActivityThreads(workThreads, filter, query), [filter, query, workThreads]);
 
   return (
     <ScrollView refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={() => void loadTasks(true)} refreshing={refreshing} />} contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
       <Text style={styles.heading}>Tasks</Text>
       <Text style={styles.muted}>Inbox shows work that needs attention or is still active.</Text>
-      <TextInput accessibilityLabel="Search tasks" onChangeText={setQuery} placeholder="Search tasks, prompts, or projects" placeholderTextColor={colors.muted} style={styles.search} value={query} />
+      <TextInput accessibilityLabel="Search activity" onChangeText={setQuery} placeholder="Search activity, history, or projects" placeholderTextColor={colors.muted} style={styles.search} value={query} />
       <ScrollView contentContainerStyle={styles.filters} horizontal showsHorizontalScrollIndicator={false}>
         {taskFilters.map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: filter === item.value }} key={item.value} onPress={() => setFilter(item.value)} style={[styles.filter, filter === item.value && styles.filterSelected]}><Text style={[styles.filterText, filter === item.value && styles.filterTextSelected]}>{item.label}</Text></Pressable>)}
       </ScrollView>
