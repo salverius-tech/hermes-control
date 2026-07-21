@@ -13,7 +13,7 @@ export function BottomNavigation() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const unreadAttention = useDataStore((state) => state.unreadAttention);
-  const showNavigation = pathname === '/' || pathname === '/tasks' || pathname === '/attention' || pathname === '/new-task' || pathname === '/projects';
+  const showNavigation = pathname === '/' || pathname === '/tasks' || pathname === '/attention' || pathname === '/new-task' || pathname === '/projects' || pathname === '/more';
 
   if (!showNavigation) return null;
 

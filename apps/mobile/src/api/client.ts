@@ -89,6 +89,19 @@ export type Diagnostics = {
   hermes_home_available?: boolean | string;
 };
 
+export type RecoveryPlanStatus = 'already_registered' | 'ready' | 'missing_repository' | 'conflict' | 'blocked';
+
+export type RecoveryPlanEntry = {
+  workspace: string;
+  slug?: string;
+  status: RecoveryPlanStatus;
+  detail?: string;
+};
+
+export type RecoveryPlan = {
+  entries: RecoveryPlanEntry[];
+};
+
 export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(buildApiUrl(apiUrl, path), {
     ...init,
@@ -118,6 +131,10 @@ export async function fetchWorkThreads(
   if (options.includeArchived) query.set('include_archived', 'true');
   const suffix = query.size ? `?${query.toString()}` : '';
   return apiFetch<WorkThreadSummary[]>(apiUrl, apiToken, `/work-threads${suffix}`);
+}
+
+export async function fetchRecoveryPlan(apiUrl: string, apiToken: string): Promise<RecoveryPlan> {
+  return apiFetch<RecoveryPlan>(apiUrl, apiToken, '/recovery-plan');
 }
 
 export async function testConnection(apiUrl: string, apiToken: string): Promise<boolean> {

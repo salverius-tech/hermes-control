@@ -55,6 +55,8 @@ export default function RootLayout() {
         <Stack.Screen name="projects/manage" options={{ title: 'Manage Project' }} />
         <Stack.Screen name="projects/[projectId]" options={{ title: 'Project' }} />
         <Stack.Screen name="new-task" options={{ ...defaultScreenOptions, title: 'New Task' }} />
+        <Stack.Screen name="more" options={{ ...defaultScreenOptions, title: 'More' }} />
+        <Stack.Screen name="recovery-plan" options={{ title: 'Recovery Plan' }} />
         <Stack.Screen name="settings" options={{ headerBackVisible: false, headerRight: undefined, title: 'Settings' }} />
       </Stack>
       <BottomNavigation />

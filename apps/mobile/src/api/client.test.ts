@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { fetchWorkThreads, testConnection } from './client';
+import { fetchRecoveryPlan, fetchWorkThreads, testConnection } from './client';
 
 const workThread = {
   attempts: [],
@@ -32,6 +32,20 @@ describe('fetchWorkThreads', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchWorkThreads('http://localhost:8787', 'test-token', { includeArchived: true, projectId: 'ops team' })).resolves.toEqual([workThread]);
+  });
+});
+
+describe('fetchRecoveryPlan', () => {
+  it('fetches the authenticated read-only recovery plan', async () => {
+    const plan = { entries: [{ slug: 'garden', status: 'ready', workspace: '/managed/garden' }] };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('http://localhost:8787/recovery-plan');
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer test-token' });
+      return new Response(JSON.stringify(plan), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchRecoveryPlan('http://localhost:8787', 'test-token')).resolves.toEqual(plan);
   });
 });
 
