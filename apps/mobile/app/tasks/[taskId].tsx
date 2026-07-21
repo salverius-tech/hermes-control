@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
-import { apiFetch, TaskEvent, TaskSummary } from '@/api/client';
+import { apiFetch, TaskEvent, TaskSummary, WorkThreadSummary } from '@/api/client';
 import { ExpandableDetails } from '@/components/ExpandableDetails';
 import { MetricCard } from '@/components/MetricCard';
 import { MetadataRow } from '@/components/MetadataRow';
@@ -24,6 +24,7 @@ export default function TaskDetailScreen() {
   const insets = useSafeAreaInsets();
   const [task, setTask] = useState<TaskSummary | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [thread, setThread] = useState<WorkThreadSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,10 +45,12 @@ export default function TaskDetailScreen() {
           apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}`),
           apiFetch<TaskEvent[]>(apiUrl, apiToken, `/tasks/${taskId}/events`),
         ]);
+        const threadResult = await apiFetch<WorkThreadSummary>(apiUrl, apiToken, `/work-threads/${taskResult.root_task_id || taskResult.task_id}`);
         await writeCache(AsyncStorage, `tasks:${taskId}`, { events: eventResult, task: taskResult });
         if (mounted) {
           setTask(taskResult);
           setEvents(eventResult);
+          setThread(threadResult);
         }
       } catch (err) {
         const cached = await readCache<{ task: TaskSummary; events: TaskEvent[] }>(AsyncStorage, `tasks:${taskId}`);
@@ -165,6 +168,11 @@ export default function TaskDetailScreen() {
       {actionMessage ? <Text accessibilityLiveRegion="polite" style={styles.success}>{actionMessage}</Text> : null}
       {task ? (
         <>
+          {thread && thread.latest_attempt.task_id !== task.task_id ? (
+            <Pressable accessibilityRole="link" onPress={() => router.replace(`/tasks/${thread.latest_attempt.task_id}`)} style={styles.latestBanner}>
+              <Text style={styles.latestText}>A newer attempt exists: view latest outcome</Text>
+            </Pressable>
+          ) : null}
           <MetricCard title={task.title}>
             <View style={styles.statusRow}>
               <StatusPill status={task.status} />
@@ -340,6 +348,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Courier',
     lineHeight: 22,
   },
+  latestBanner: { backgroundColor: colors.primarySoft, borderColor: colors.primary, borderRadius: 12, borderWidth: 1, padding: spacing.md },
+  latestText: { color: colors.text, fontWeight: '800' },
   muted: {
     color: colors.muted,
   },
