@@ -2,21 +2,21 @@ import { Link } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { TaskSummary } from '@/api/client';
+import type { WorkThreadSummary } from '@/api/client';
 import { EmptyState } from '@/components/EmptyState';
 import { MetadataRow } from '@/components/MetadataRow';
 import { SectionHeader } from '@/components/SectionHeader';
 import { StatusPill } from '@/components/StatusPill';
+import { inboxWorkThreadState } from '@/features/tasks/inbox-work-thread-state';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useDataStore } from '@/state/data-store';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const { tasks, projects, websocket, offline, lastSync } = useDataStore();
+  const { workThreads, projects, websocket, offline, lastSync } = useDataStore();
 
-  const attention = tasks.filter((task) => ['awaiting_approval', 'failed', 'blocked'].includes(task.status));
-  const running = tasks.filter((task) => task.status === 'running' || task.status === 'queued');
+  const { attentionRequired, active, recentlyResolved } = inboxWorkThreadState(workThreads);
   const connectionStatus = offline || websocket === 'disconnected' ? 'offline' : websocket === 'connected' ? 'busy' : 'idle';
 
   return (
@@ -30,14 +30,19 @@ export default function DashboardScreen() {
       {!lastSync && !offline ? <ActivityIndicator color={colors.primary} /> : null}
 
 
-      <View style={styles.section}><SectionHeader actionHref="/attention" actionLabel="View all" count={attention.length} title="Needs attention" />
-        {attention.slice(0, 3).map((task) => <TaskRow key={task.task_id} task={task} />)}
-        {(!lastSync && !offline) ? null : attention.length === 0 ? <EmptyState body="Approvals, blockers, and failures will appear here." title="All clear" /> : null}
+      <View style={styles.section}><SectionHeader actionHref="/attention" actionLabel="View all" count={attentionRequired.length} title="Needs attention" />
+        {attentionRequired.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} thread={thread} />)}
+        {(!lastSync && !offline) ? null : attentionRequired.length === 0 ? <EmptyState body="Approvals, blockers, and failures will appear here." title="All clear" /> : null}
       </View>
 
-      <View style={styles.section}><SectionHeader actionHref="/tasks" actionLabel="View all" count={running.length} title="Active work" />
-        {running.slice(0, 3).map((task) => <TaskRow key={task.task_id} task={task} />)}
-        {(!lastSync && !offline) ? null : running.length === 0 ? <EmptyState body="Start a task from a project when you are ready." title="Nothing running" /> : null}
+      <View style={styles.section}><SectionHeader actionHref="/tasks" actionLabel="View all" count={active.length} title="Active work" />
+        {active.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} thread={thread} />)}
+        {(!lastSync && !offline) ? null : active.length === 0 ? <EmptyState body="Start a task from a project when you are ready." title="Nothing running" /> : null}
+      </View>
+
+      <View style={styles.section}><SectionHeader actionHref="/tasks" actionLabel="View all" count={recentlyResolved.length} title="Recent work" />
+        {recentlyResolved.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} thread={thread} />)}
+        {(!lastSync && !offline) ? null : recentlyResolved.length === 0 ? <EmptyState body="Resolved work will appear here after it finishes." title="No recent work" /> : null}
       </View>
 
       <View style={styles.section}><SectionHeader actionHref="/projects" actionLabel="View all" count={projects.length} title="Projects" />
@@ -48,8 +53,10 @@ export default function DashboardScreen() {
   );
 }
 
-function TaskRow({ task }: { task: TaskSummary }) {
-  return <Link href={`/tasks/${task.task_id}`} asChild><Pressable style={({ pressed }) => [styles.task, pressed && styles.pressed]}><View style={styles.taskTop}><Text numberOfLines={2} style={styles.taskTitle}>{task.title}</Text><StatusPill status={task.status} /></View><Text numberOfLines={1} style={styles.muted}>{task.project_id} · {task.relation || 'original'}</Text></Pressable></Link>;
+function WorkThreadRow({ thread }: { thread: WorkThreadSummary }) {
+  const latest = thread.latest_attempt;
+  const attemptCount = thread.attempts.length;
+  return <Link href={`/tasks/${latest.task_id}`} asChild><Pressable style={({ pressed }) => [styles.task, pressed && styles.pressed]}><View style={styles.taskTop}><Text numberOfLines={2} style={styles.taskTitle}>{latest.title}</Text><StatusPill status={latest.status} /></View><Text numberOfLines={1} style={styles.muted}>{thread.project_id} · {attemptCount} immutable attempt{attemptCount === 1 ? '' : 's'}</Text></Pressable></Link>;
 }
 
 const styles = StyleSheet.create({
