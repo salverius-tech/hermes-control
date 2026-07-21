@@ -287,6 +287,24 @@ def create_app() -> FastAPI:
     def list_attention() -> list[TaskSummary]:
         return [task for task in projection.list_tasks() if task.status in {"awaiting_approval", "attention_required", "failed", "blocked"}]
 
+    @app.get("/recovery-plan", dependencies=[Depends(require_auth)])
+    def recovery_plan() -> dict[str, list[dict[str, str]]]:
+        if managed_workspace is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
+        entries = []
+        for workspace_path, manifest, error in managed_workspace.discover_manifests():
+            if error is not None:
+                entries.append({"workspace": str(workspace_path), "status": "blocked", "detail": error})
+                continue
+            assert manifest is not None
+            registered = require_workspace().get_project(manifest.identity.slug)
+            entries.append({
+                "workspace": str(workspace_path),
+                "slug": manifest.identity.slug,
+                "status": "already_registered" if registered else "ready",
+            })
+        return {"entries": entries}
+
     @app.get("/projects", dependencies=[Depends(require_auth)])
     def list_projects(include_archived: bool = False) -> list[ProjectSummary]:
         if allow_synthetic_projects and workspace is None:

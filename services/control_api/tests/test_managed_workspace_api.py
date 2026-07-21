@@ -209,3 +209,12 @@ def test_attach_repository_to_workspace_project(monkeypatch, tmp_path):
     workspace = root / "attach"
     assert response.json()["folders"] == [str(workspace), str(workspace / "repo")]
     assert "remote_url: https://example.test/team/attach.git" in (workspace / MANIFEST_FILENAME).read_text()
+
+
+def test_recovery_plan_is_read_only_and_reports_registered_workspace(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    assert client.post("/projects", headers=headers, json={"name": "Recovered", "origin": "workspace"}).status_code == 201
+    response = client.get("/recovery-plan", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"entries": [{"workspace": str(root / "recovered"), "slug": "recovered", "status": "already_registered"}]}

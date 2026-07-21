@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .git_adapter import GitAdapter, GitCloneError
 from .models import ProjectCreateRequest, ProjectSummary
@@ -178,7 +178,23 @@ class ManagedWorkspaceStore:
         self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "registered"})}))
         return project
 
+    def discover_manifests(self) -> list[tuple[Path, ProjectManifest | None, str | None]]:
+        """Read only direct managed-workspace manifests; never follows external paths."""
+        if not self.root.is_dir():
+            return []
+        discovered = []
+        for manifest_path in sorted(self.root.glob(f"*/{MANIFEST_FILENAME}")):
+            workspace = manifest_path.parent.resolve()
+            try:
+                if not workspace.is_relative_to(self.root):
+                    continue
+                discovered.append((workspace, self.read_manifest(workspace), None))
+            except (OSError, ValueError, ValidationError) as exc:
+                discovered.append((workspace, None, str(exc)))
+        return discovered
+
     def attach_repository(self, project_id: str, repository_url: str) -> ProjectSummary:
+
         project = self.native.get_project(project_id)
         if project is None or not project.primary_folder:
             raise ValueError("unknown managed project")
