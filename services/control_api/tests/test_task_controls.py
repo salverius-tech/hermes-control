@@ -1,7 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from services.control_api.hermes_client import HermesTaskService
 from services.control_api.main import create_app
+from services.control_api.models import TaskStatus
 
 
 pytestmark = pytest.mark.integration
@@ -103,6 +105,37 @@ def test_get_missing_work_thread_returns_404(monkeypatch):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "work thread not found"
+
+
+def test_work_thread_contract_uses_completed_retry_as_latest_for_historical_root(monkeypatch):
+    """A historical attempt must resolve to its newer successful outcome."""
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+
+    def complete_attempt(self, task, request, *, on_update=None):
+        status = TaskStatus.COMPLETED if request.relation == "retry" else TaskStatus.FAILED
+        self.projection.update_task(task.task_id, status=status)
+
+    monkeypatch.setattr(HermesTaskService, "start_task", complete_attempt)
+    client = TestClient(create_app())
+
+    root = client.post("/tasks", headers=auth_headers(), json={"prompt": "Repair deployment", "project_id": "ops"}).json()
+    assert client.get(f"/tasks/{root['task_id']}", headers=auth_headers()).json()["status"] == "failed"
+
+    retry = client.post(f"/tasks/{root['task_id']}/retry", headers=auth_headers())
+    assert retry.status_code == 201
+
+    listed = client.get("/work-threads?project_id=ops", headers=auth_headers())
+    historical_link = client.get(f"/work-threads/{root['task_id']}", headers=auth_headers())
+
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    thread = historical_link.json()
+    assert historical_link.status_code == 200
+    assert thread["root_task_id"] == root["task_id"]
+    assert [attempt["task_id"] for attempt in thread["attempts"]] == [root["task_id"], retry.json()["task_id"]]
+    assert thread["attempts"][0]["status"] == "failed"
+    assert thread["latest_attempt"]["task_id"] == retry.json()["task_id"]
+    assert thread["latest_outcome"] == "completed"
 
 
 def test_continue_task_creates_linked_continuation_with_same_session(monkeypatch):
