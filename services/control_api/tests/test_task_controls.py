@@ -91,6 +91,16 @@ def test_retry_task_creates_new_task_with_original_prompt(monkeypatch):
     assert retried["status"] == "queued"
 
 
+def test_get_missing_work_thread_returns_404(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+
+    response = client.get("/work-threads/task-missing", headers=auth_headers())
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "work thread not found"
+
+
 def test_continue_task_creates_linked_continuation_with_same_session(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())
