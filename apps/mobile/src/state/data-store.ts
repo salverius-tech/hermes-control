@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
-import { apiFetch, AgentStatus, Diagnostics, ProjectSummary, SessionSummary, TaskSummary } from '@/api/client';
+import { apiFetch, AgentStatus, Diagnostics, fetchWorkThreads, ProjectSummary, SessionSummary, TaskSummary, WorkThreadSummary } from '@/api/client';
 import { createEventsSocket, parseLiveEvent, redactWebSocketUrl } from '@/api/events';
 import { buildWebSocketUrl } from '@/api/url';
 import { flushTaskQueue, loadTaskQueue, type QueuedTask } from '@/features/tasks/offline-queue';
@@ -21,25 +21,25 @@ async function readSeen(): Promise<Record<string, string>> { try { return JSON.p
 async function unreadCount(tasks: TaskSummary[]): Promise<number> { const seen = await readSeen(); return attentionItems(tasks).filter((task) => seen[task.task_id] !== task.updated_at).length; }
 
 type DataState = {
-  tasks: TaskSummary[]; projects: ProjectSummary[]; sessions: SessionSummary[]; agents: AgentStatus[]; attention: TaskSummary[]; queuedTasks: QueuedTask[]; diagnostics: Diagnostics | null;
+  tasks: TaskSummary[]; workThreads: WorkThreadSummary[]; projects: ProjectSummary[]; sessions: SessionSummary[]; agents: AgentStatus[]; attention: TaskSummary[]; queuedTasks: QueuedTask[]; diagnostics: Diagnostics | null;
   websocket: 'disconnected' | 'connecting' | 'connected'; websocketUrl: string | null; websocketError: string | null; websocketCloseCode: number | null; websocketCloseReason: string | null;
   lastSync: string | null; stale: boolean; offline: boolean; unreadAttention: number; lastEventSequence: number | null; sequenceGap: boolean;
   refresh: () => Promise<void>; connect: () => () => void; markAttentionSeen: (taskId: string) => Promise<void>;
 };
 
 export const useDataStore = create<DataState>((set, get) => ({
-  tasks: [], projects: [], sessions: [], agents: [], attention: [], queuedTasks: [], diagnostics: null, websocket: 'disconnected', websocketUrl: null, websocketError: null, websocketCloseCode: null, websocketCloseReason: null, lastSync: null, stale: false, offline: false, unreadAttention: 0, lastEventSequence: null, sequenceGap: false,
+  tasks: [], workThreads: [], projects: [], sessions: [], agents: [], attention: [], queuedTasks: [], diagnostics: null, websocket: 'disconnected', websocketUrl: null, websocketError: null, websocketCloseCode: null, websocketCloseReason: null, lastSync: null, stale: false, offline: false, unreadAttention: 0, lastEventSequence: null, sequenceGap: false,
   async refresh() {
     const { apiUrl, apiToken } = useSettingsStore.getState(); if (!apiToken) return;
     try {
       await flushTaskQueue(AsyncStorage, apiUrl, apiToken);
       const queuedTasks = await loadTaskQueue(AsyncStorage);
-      const [tasks, projects, sessions, agents, diagnostics] = await Promise.all([
-        apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks?include_archived=true'), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
+      const [tasks, workThreads, projects, sessions, agents, diagnostics] = await Promise.all([
+        apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks?include_archived=true'), fetchWorkThreads(apiUrl, apiToken, { includeArchived: true }), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
         apiFetch<SessionSummary[]>(apiUrl, apiToken, '/sessions'), apiFetch<AgentStatus[]>(apiUrl, apiToken, '/agents'), apiFetch<Diagnostics>(apiUrl, apiToken, '/diagnostics'),
       ]);
       const attention = attentionItems(tasks);
-      const data = { tasks, projects, sessions, agents, attention, queuedTasks, diagnostics, lastSync: new Date().toISOString(), stale: false, offline: false, unreadAttention: await unreadCount(tasks) };
+      const data = { tasks, workThreads, projects, sessions, agents, attention, queuedTasks, diagnostics, lastSync: new Date().toISOString(), stale: false, offline: false, unreadAttention: await unreadCount(tasks) };
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data)); set(data);
     } catch {
       try { const cached = await AsyncStorage.getItem(CACHE_KEY); if (cached) set({ ...(JSON.parse(cached) as DataState), stale: true, offline: true }); else set({ stale: true, offline: true }); } catch { set({ stale: true, offline: true }); }
