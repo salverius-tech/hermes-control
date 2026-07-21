@@ -242,7 +242,7 @@ def _classify_failure(message: str) -> tuple[str, bool]:
     if "not configured" in lowered:
         return "configuration", True
     if "no bridge heartbeat" in lowered:
-        return "stalled", True
+        return "stale_heartbeat", True
     if "connection refused" in lowered or "timed out" in lowered or "socket" in lowered:
         return "connectivity", True
     if "does not exist" in lowered or "folder" in lowered or "directory" in lowered:
@@ -325,6 +325,10 @@ class HermesTaskService:
                 blocker_category="recovery",
                 blocker_message="Task was interrupted when the Control API restarted",
                 blocker_retryable=True,
+                execution_state=TaskExecutionState.INTERRUPTED,
+                execution_phase="interrupted",
+                execution_detail="The Control API restarted before this task reached a terminal outcome",
+                terminal_reason="control_api_restart",
                 event_type="task.interrupted",
             ))
         return interrupted
@@ -462,6 +466,7 @@ class HermesTaskService:
             return canceled
         except Exception as exc:  # noqa: BLE001 - boundary converts adapter failures to task state
             category, blocked = _classify_failure(str(exc))
+            stale_heartbeat = category == "stale_heartbeat"
             failed = self.projection.update_task(
                 task_id,
                 status=TaskStatus.BLOCKED if blocked else TaskStatus.FAILED,
@@ -469,7 +474,12 @@ class HermesTaskService:
                 blocker_category=category if blocked else None,
                 blocker_message=str(exc) if blocked else None,
                 blocker_retryable=blocked,
+                execution_state=TaskExecutionState.STALE_HEARTBEAT if stale_heartbeat else None,
+                execution_phase="bridge_unresponsive" if stale_heartbeat else None,
+                execution_detail="The bridge stopped sending heartbeats or task output" if stale_heartbeat else None,
+                terminal_reason="missing_heartbeat" if stale_heartbeat else None,
                 event_type="task.blocked" if blocked else "task.failed",
+                event_metadata={"reason": "missing_heartbeat"} if stale_heartbeat else None,
             )
             await self.notify_task(failed, event_type="task.blocked" if blocked else "task.failed")
             if on_update is not None:

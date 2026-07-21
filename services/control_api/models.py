@@ -24,6 +24,8 @@ class TaskExecutionState(StrEnum):
     ACTIVE = "active"
     QUIET = "quiet"
     STALLED = "stalled"
+    STALE_HEARTBEAT = "stale_heartbeat"
+    INTERRUPTED = "interrupted"
 
 
 class TaskCreateRequest(BaseModel):
@@ -88,6 +90,7 @@ class TaskSummary(BaseModel):
     execution_state: TaskExecutionState = TaskExecutionState.UNKNOWN
     execution_phase: str | None = None
     execution_detail: str | None = None
+    terminal_reason: str | None = None
 
 
 class WorkThreadSummary(BaseModel):

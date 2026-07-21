@@ -163,6 +163,7 @@ class TaskProjection:
         execution_state: TaskExecutionState | None = None,
         execution_phase: str | None = None,
         execution_detail: str | None = None,
+        terminal_reason: str | None = None,
         event_type: str = "task.updated",
         event_metadata: dict[str, object] | None = None,
     ) -> TaskSummary:
@@ -194,6 +195,8 @@ class TaskProjection:
             update_data["execution_phase"] = execution_phase
         if execution_detail is not None:
             update_data["execution_detail"] = execution_detail
+        if terminal_reason is not None:
+            update_data["terminal_reason"] = terminal_reason
         update_data["updated_at"] = datetime.now(timezone.utc)
         updated = TaskSummary(**update_data)
         self._tasks[task_id] = updated
