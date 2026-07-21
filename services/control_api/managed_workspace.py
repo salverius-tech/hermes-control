@@ -6,6 +6,7 @@ import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -56,6 +57,7 @@ class ManifestLifecycle(BaseModel):
     managed_by: str = "hermes-control"
     created_at: datetime
     native_registration: str
+    repository_clone: Literal["pending", "cloned", "clone_failed"] | None = None
 
 
 class ProjectManifest(BaseModel):
@@ -146,15 +148,22 @@ class ManagedWorkspaceStore:
         (staging / "notes").mkdir()
         (staging / "artifacts").mkdir()
         (staging / "README.md").write_text(f"# {request.name.strip()}\n", encoding="utf-8")
-        manifest = self._manifest(request, slug, "pending").model_copy(update={"repository": ManifestRepository(remote_url=remote)})
+        manifest = self._manifest(request, slug, "pending").model_copy(update={
+            "repository": ManifestRepository(remote_url=remote),
+            "lifecycle": ManifestLifecycle(
+                created_at=datetime.now(timezone.utc), native_registration="pending", repository_clone="pending"
+            ),
+        })
         self.write_manifest(staging, manifest)
         staging.replace(workspace)
         repo = workspace / "repo"
         try:
             subprocess.run(["git", "clone", "--", remote, str(repo)], check=True, capture_output=True, text=True, timeout=300)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "clone_failed"})}))
+            self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"repository_clone": "clone_failed"})}))
             raise ValueError("repository clone failed") from exc
+        manifest = manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"repository_clone": "cloned"})})
+        self.write_manifest(workspace, manifest)
         try:
             project = self.native.create_project(request.model_copy(update={"slug": slug, "folders": [str(workspace), str(repo)], "primary_folder": str(workspace)}))
         except Exception:

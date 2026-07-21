@@ -136,4 +136,5 @@ def test_clone_origin_clones_before_native_registration(monkeypatch, tmp_path):
     workspace = root / "remote"
     assert (workspace / "repo").is_dir()
     assert "remote_url: https://example.test/team/remote.git" in (workspace / MANIFEST_FILENAME).read_text()
+    assert "repository_clone: cloned" in (workspace / MANIFEST_FILENAME).read_text()
     assert response.json()["folders"] == [str(workspace), str(workspace / "repo")]
