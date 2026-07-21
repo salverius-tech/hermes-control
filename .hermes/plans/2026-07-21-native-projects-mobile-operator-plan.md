@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** Proposed; implementation has not been approved.  
-> **Progress:** 15 / 31 implementation tasks complete.  
+> **Progress:** 16 / 31 implementation tasks complete.  
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -245,7 +245,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
   **Evidence:** negative tests and sanitized error assertions.
 - [x] **P3.4** Preserve successfully cloned files when later native registration fails; mark repairable state and expose an explicit repair action.  
   **Evidence:** partial-failure integration test.
-- [ ] **P3.5** Support attaching/cloning a repository into an existing workspace-only project.  
+- [x] **P3.5** Support attaching/cloning a repository into an existing workspace-only project.  
   **Evidence:** API/manifest/native-folder synchronization tests.
 
 ## Phase 4 — Reviewable recovery
