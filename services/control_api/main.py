@@ -36,8 +36,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Hermes Mobile Control API", version="0.1.0")
     store_path = os.getenv("CONTROL_API_DB_PATH")
     store = SQLiteTaskStore(store_path) if store_path else None
-    workspace = HermesWorkspaceStore(os.getenv("CONTROL_API_HERMES_HOME", "~/.hermes"))
-    projection = TaskProjection(store=store, workspace=workspace if os.getenv("CONTROL_API_HERMES_HOME") else None)
+    hermes_home = os.getenv("CONTROL_API_HERMES_HOME")
+    allow_synthetic_projects = os.getenv("CONTROL_API_ALLOW_SYNTHETIC_PROJECTS") == "1"
+    workspace = HermesWorkspaceStore(hermes_home) if hermes_home else None
+    projection = TaskProjection(
+        store=store,
+        workspace=workspace,
+        allow_synthetic_projects=allow_synthetic_projects,
+    )
     task_service = HermesTaskService(
         projection=projection,
         notifier=notifier_from_environment(),
@@ -69,21 +75,47 @@ def create_app() -> FastAPI:
             execution_folder=task.execution_folder,
         )
 
+    def require_workspace() -> HermesWorkspaceStore:
+        if workspace is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Native Hermes project integration is not configured",
+            )
+        if not workspace.available:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Native Hermes project store is unavailable",
+            )
+        return workspace
+
     def resolve_project_context(request: TaskCreateRequest) -> TaskCreateRequest:
-        if request.execution_folder:
-            try:
-                execution_folder = workspace.validate_execution_folder(request.execution_folder)
-            except ValueError as exc:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-            request = request.model_copy(update={"execution_folder": execution_folder})
-        if not os.getenv("CONTROL_API_HERMES_HOME") or request.execution_folder:
+        if allow_synthetic_projects and workspace is None:
+            if request.execution_folder:
+                try:
+                    execution_folder = HermesWorkspaceStore().validate_execution_folder(request.execution_folder)
+                except ValueError as exc:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                return request.model_copy(update={"execution_folder": execution_folder})
             return request
-        project = workspace.get_project(request.project_id)
+        native_workspace = require_workspace()
+        project = native_workspace.get_project(request.project_id)
         if project is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown Hermes project: {request.project_id}")
+        if project.archived:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Project is archived: {request.project_id}")
         if not project.primary_folder:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Project has no primary folder: {request.project_id}")
-        return request.model_copy(update={"execution_folder": project.primary_folder})
+        try:
+            execution_folder = (
+                native_workspace.validate_project_execution_folder(request.project_id, request.execution_folder)
+                if request.execution_folder
+                else native_workspace.validate_project_execution_folder(request.project_id, project.primary_folder)
+            )
+            if request.session_id:
+                native_workspace.validate_session(request.session_id, request.project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        return request.model_copy(update={"execution_folder": execution_folder})
 
     @app.get("/health")
     def health() -> dict[str, bool]:
@@ -108,7 +140,9 @@ def create_app() -> FastAPI:
             ),
             "notification_mode": "discord" if os.getenv("CONTROL_API_DISCORD_WEBHOOK_URL") else "disabled",
             "websocket_path": "/ws/events",
-            "hermes_home_available": str(workspace.available).lower(),
+            "native_projects_configured": str(workspace is not None).lower(),
+            "hermes_home_available": str(bool(workspace and workspace.available)).lower(),
+            "synthetic_projects_enabled": str(allow_synthetic_projects).lower(),
             "bridge_configured": str(bool(plugin_socket)).lower(),
             "bridge_socket_available": str(bool(plugin_socket and Path(plugin_socket).exists())).lower(),
             "executor_ready": str(bool((plugin_socket and Path(plugin_socket).exists()) or command_ready)).lower(),
@@ -247,14 +281,23 @@ def create_app() -> FastAPI:
 
     @app.get("/projects", dependencies=[Depends(require_auth)])
     def list_projects(include_archived: bool = False) -> list[ProjectSummary]:
-        if include_archived and workspace.available:
-            archived = workspace.list_projects(include_archived=True)
+        if allow_synthetic_projects and workspace is None:
+            return projection.list_projects(include_archived=include_archived)
+        native_workspace = require_workspace()
+        if include_archived:
+            archived = native_workspace.list_projects(include_archived=True)
             active = {project.project_id: project for project in projection.list_projects()}
             return [active.get(project.project_id, project) for project in archived]
         return projection.list_projects()
 
     @app.get("/projects/{project_id}", dependencies=[Depends(require_auth)])
     def get_project(project_id: str) -> ProjectSummary:
+        if allow_synthetic_projects and workspace is None:
+            project = projection.get_project(project_id, include_archived=True)
+            if project is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+            return project
+        require_workspace()
         project = projection.get_project(project_id, include_archived=True)
         if project is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -307,14 +350,14 @@ def create_app() -> FastAPI:
     @app.post("/projects", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth)])
     def create_project(request: ProjectCreateRequest) -> ProjectSummary:
         try:
-            return workspace.create_project(request)
+            return require_workspace().create_project(request)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     @app.patch("/projects/{project_id}", dependencies=[Depends(require_auth)])
     def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectSummary:
         try:
-            return workspace.update_project(project_id, request)
+            return require_workspace().update_project(project_id, request)
         except KeyError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found") from exc
         except (RuntimeError, ValueError) as exc:
@@ -323,7 +366,7 @@ def create_app() -> FastAPI:
     @app.post("/projects/{project_id}/folders", dependencies=[Depends(require_auth)])
     def add_project_folder(project_id: str, request: FolderRequest) -> ProjectSummary:
         try:
-            return workspace.add_folder(project_id, request.path)
+            return require_workspace().add_folder(project_id, request.path)
         except KeyError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found") from exc
         except (RuntimeError, ValueError) as exc:
@@ -332,7 +375,7 @@ def create_app() -> FastAPI:
     @app.delete("/projects/{project_id}/folders", dependencies=[Depends(require_auth)])
     def remove_project_folder(project_id: str, request: FolderRequest) -> ProjectSummary:
         try:
-            return workspace.remove_folder(project_id, request.path)
+            return require_workspace().remove_folder(project_id, request.path)
         except KeyError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found") from exc
         except (RuntimeError, ValueError) as exc:
@@ -340,12 +383,12 @@ def create_app() -> FastAPI:
 
     @app.get("/sessions", dependencies=[Depends(require_auth)])
     def list_sessions(project_id: str | None = None, limit: int = 100) -> list[SessionSummary]:
-        return workspace.list_sessions(project_id=project_id, limit=min(max(limit, 1), 500))
+        return require_workspace().list_sessions(project_id=project_id, limit=min(max(limit, 1), 500))
 
     @app.get("/folders", dependencies=[Depends(require_auth)])
     def list_folders(path: str | None = None) -> list[str]:
         try:
-            return workspace.list_directories(path)
+            return require_workspace().list_directories(path)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

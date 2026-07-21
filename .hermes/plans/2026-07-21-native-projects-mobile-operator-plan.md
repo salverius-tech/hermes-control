@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** Proposed; implementation has not been approved.  
-> **Progress:** 0 / 31 implementation tasks complete.  
+> **Progress:** 5 / 31 implementation tasks complete.  
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -209,15 +209,15 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 
 ## Phase 1 — Native Hermes Project correctness
 
-- [ ] **P1.1** Make the workspace projection explicitly use the configured Hermes home/profile; fail diagnostics clearly when it is unavailable.  
+- [x] **P1.1** Make the workspace projection explicitly use the configured Hermes home/profile; fail diagnostics clearly when it is unavailable.  
   **Files likely:** `services/control_api/main.py`, `workspace.py`, diagnostics models/tests.
-- [ ] **P1.2** Make `GET /projects` and `GET /projects/{id}` use the same authoritative native projection.  
+- [x] **P1.2** Make `GET /projects` and `GET /projects/{id}` use the same authoritative native projection.  
   **Evidence:** regression test enumerates every list ID and verifies its detail route.
-- [ ] **P1.3** Remove production synthetic task-derived projects and synthetic Default project behavior; retain an explicitly labelled development-only mode only if needed.  
+- [x] **P1.3** Remove production synthetic task-derived projects and synthetic Default project behavior; retain an explicitly labelled development-only mode only if needed.  
   **Evidence:** unknown project IDs cannot appear as valid production projects.
-- [ ] **P1.4** Validate submitted native project IDs, archive state, project folders, execution context, and continuation session containment server-side.  
+- [x] **P1.4** Validate submitted native project IDs, archive state, project folders, execution context, and continuation session containment server-side.  
   **Evidence:** tests for unknown, archived, out-of-project folder, and invalid-session rejection.
-- [ ] **P1.5** Expose truthful profile/project-store readiness in diagnostics without exposing host paths or secrets.  
+- [x] **P1.5** Expose truthful profile/project-store readiness in diagnostics without exposing host paths or secrets.  
   **Evidence:** authenticated diagnostics tests and live redacted verification.
 
 ## Phase 2 — Managed workspace and manifest foundation
@@ -309,8 +309,9 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 Add entries here only after running the command against the current relevant revision.
 
 | Date | Phase/task | Command or procedure | Result | Notes |
-|---|---|---|---|---|
-| — | — | — | — | No implementation verification recorded yet. |
+|---|---|---|---|
+| 2026-07-21 | P1.1–P1.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 95 passed | Native projection, strict production mode, task-context validation, and diagnostics coverage. |
+| 2026-07-21 | P1.1–P1.5 | `git diff --check` | passed | No whitespace errors. |
 
 ## 10. Decision log
 
