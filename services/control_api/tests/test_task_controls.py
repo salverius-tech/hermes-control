@@ -95,6 +95,10 @@ def test_retry_task_creates_new_task_with_original_prompt(monkeypatch):
     assert retried["project_id"] == "ops"
     assert retried["priority"] == "high"
     assert retried["status"] == "queued"
+    assert {task["task_id"] for task in client.get("/tasks", headers=auth_headers()).json()} == {
+        created["task_id"],
+        retried["task_id"],
+    }
 
 
 def test_get_missing_work_thread_returns_404(monkeypatch):
@@ -326,3 +330,9 @@ def test_recovery_controls_are_linked_idempotent_and_environment_check_does_not_
     assert new_session.json()["task_id"] == new_session_repeat.json()["task_id"]
     assert new_session.json()["prompt"] == "Recover this safely"
     assert new_session.json()["session_id"] is None
+    assert {task["task_id"] for task in client.get("/tasks", headers=auth_headers()).json()} == {
+        created["task_id"],
+        first_continue.json()["task_id"],
+        edited.json()["task_id"],
+        new_session.json()["task_id"],
+    }
