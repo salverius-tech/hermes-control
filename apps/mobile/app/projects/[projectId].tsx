@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { apiFetch, ProjectSummary, SessionSummary, TaskSummary } from '@/api/client';
 import { StatusPill } from '@/components/StatusPill';
+import { workspaceFolderState } from '@/features/projects/workspace-state';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useSettingsStore } from '@/state/settings';
 import { colors, spacing } from '@/theme/tokens';
@@ -57,6 +58,7 @@ export default function ProjectDetailScreen() {
     }
     return [...groups.values()].sort((a, b) => Date.parse(b[0].updated_at) - Date.parse(a[0].updated_at));
   }, [tasks]);
+  const folders = project ? workspaceFolderState(project) : null;
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
@@ -68,7 +70,12 @@ export default function ProjectDetailScreen() {
             <View><Text style={styles.title}>{project.name}</Text><Text style={styles.id}>{project.project_id}</Text></View>
             <Link href={{ pathname: '/projects/manage', params: { projectId: project.project_id } }} asChild><Pressable><Text style={styles.link}>Manage</Text></Pressable></Link>
             {project.description ? <Text style={styles.muted}>{project.description}</Text> : null}
-            {project.primary_folder ? <Text style={styles.folder}>Primary folder: {project.primary_folder}</Text> : null}
+            <View style={styles.workspaceState}>
+              <Text style={styles.workspaceLabel}>Workspace primary folder</Text>
+              <Text selectable style={styles.folder}>{folders?.primaryFolder || 'No primary folder registered'}</Text>
+              <Text style={styles.workspaceLabel}>Repository folder</Text>
+              <Text selectable style={styles.folder}>{folders?.repositoryFolder || 'Workspace-only — no repository folder registered'}</Text>
+            </View>
           </View>
           <Link href={{ pathname: '/new-task', params: { projectId: project.project_id } }} asChild>
             <Pressable style={styles.primaryButton}><Text style={styles.primaryButtonText}>Start task in this project</Text></Pressable>
@@ -126,4 +133,6 @@ const styles = StyleSheet.create({
   taskTop: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
   thread: { backgroundColor: colors.elevated, borderColor: colors.border, borderRadius: 18, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
   title: { color: colors.text, fontSize: 30, fontWeight: '900' },
+  workspaceLabel: { color: colors.text, fontSize: 13, fontWeight: '800' },
+  workspaceState: { borderTopColor: colors.border, borderTopWidth: 1, gap: 3, marginTop: spacing.sm, paddingTop: spacing.sm },
 });
