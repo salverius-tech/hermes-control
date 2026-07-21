@@ -65,3 +65,18 @@ def test_sqlite_task_store_reloads_archived_task(tmp_path):
 
     assert reloaded is not None
     assert reloaded.archived_at is not None
+
+
+def test_sqlite_task_store_reloads_work_thread_lineage(tmp_path):
+    db_path = tmp_path / "tasks.db"
+    first = TaskProjection(store=SQLiteTaskStore(db_path))
+    root = first.create_task(TaskCreateRequest(prompt="Recover deployment", project_id="ops"))
+    first.update_task(root.task_id, status=TaskStatus.FAILED)
+    retry = first.create_task(TaskCreateRequest(prompt="Recover deployment", project_id="ops", parent_task_id=root.task_id, root_task_id=root.task_id, relation="retry"))
+    first.update_task(retry.task_id, status=TaskStatus.COMPLETED)
+
+    threads = TaskProjection(store=SQLiteTaskStore(db_path)).list_work_threads(project_id="ops")
+
+    assert len(threads) == 1
+    assert [attempt.task_id for attempt in threads[0].attempts] == [root.task_id, retry.task_id]
+    assert threads[0].latest_attempt.task_id == retry.task_id
