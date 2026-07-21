@@ -17,6 +17,7 @@ from .models import (
     ApprovalRequest,
     FolderRequest,
     GuidanceRequest,
+    NewSessionRequest,
     ProjectCreateRequest,
     RecoveryApplyRequest,
     RepositoryAttachRequest,
@@ -26,6 +27,7 @@ from .models import (
     WorkThreadSummary,
     TaskCreateRequest,
     TaskEvent,
+    TaskStatus,
     TaskSummary,
 )
 from .notifications import notifier_from_environment
@@ -86,6 +88,23 @@ def create_app() -> FastAPI:
             execution_folder=task.execution_folder,
         )
 
+    def _require_recovery_source(task: TaskSummary) -> None:
+        if task.archived_at is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Restore the task before creating another attempt")
+        active_statuses = {TaskStatus.AWAITING_APPROVAL, TaskStatus.QUEUED, TaskStatus.RUNNING}
+        if TaskStatus(task.status) in active_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Task is {task.status}; wait for it to stop before creating another attempt",
+            )
+
+    def executor_ready() -> bool:
+        plugin_socket = os.getenv("CONTROL_API_HERMES_PLUGIN_SOCKET")
+        command = os.getenv("CONTROL_API_HERMES_COMMAND")
+        command_parts = shlex.split(command, posix=os.name != "nt") if command else []
+        command_ready = bool(command_parts and (Path(command_parts[0]).exists() or shutil.which(command_parts[0])))
+        return bool((plugin_socket and Path(plugin_socket).exists()) or command_ready)
+
     def require_workspace() -> HermesWorkspaceStore:
         if workspace is None:
             raise HTTPException(
@@ -133,6 +152,19 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         return request.model_copy(update={"execution_folder": execution_folder})
+
+    async def submit_linked_task(request: TaskCreateRequest, *, idempotency_key: str | None) -> TaskSummary:
+        if idempotency_key:
+            existing = projection.get_task_by_idempotency_key(idempotency_key)
+            if existing is not None:
+                return existing
+            request = request.model_copy(update={"idempotency_key": idempotency_key})
+        request = resolve_project_context(request)
+        task = await task_service.submit_task(request, on_update=broadcast_task_update)
+        await connections.broadcast_task_created(task)
+        if not request.requires_approval:
+            task_service.start_task(task, request, on_update=broadcast_task_update)
+        return task
 
     @app.get("/health")
     def health() -> dict[str, bool]:
@@ -243,25 +275,23 @@ def create_app() -> FastAPI:
         return task
 
     @app.post("/tasks/{task_id}/retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
-    async def retry_task(task_id: str) -> TaskSummary:
+    async def retry_task(task_id: str, idempotency_key: str | None = Header(default=None)) -> TaskSummary:
         original = projection.get_task(task_id)
         if original is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-        request = request_from_task(original)
-        request = resolve_project_context(request)
-        task = await task_service.submit_task(request, on_update=broadcast_task_update)
-        await connections.broadcast_task_created(task)
-        if not request.requires_approval:
-            task_service.start_task(task, request, on_update=broadcast_task_update)
-        return task
+        _require_recovery_source(original)
+        return await submit_linked_task(request_from_task(original), idempotency_key=idempotency_key)
 
     @app.post("/tasks/{task_id}/continue", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
-    async def continue_task(task_id: str, request: GuidanceRequest) -> TaskSummary:
+    async def continue_task(task_id: str, request: GuidanceRequest, idempotency_key: str | None = Header(default=None)) -> TaskSummary:
         original = projection.get_task(task_id)
         if original is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         if original.session_id is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Task has no Hermes session to continue")
+        _require_recovery_source(original)
+        if request.new_session or request.relation == "edited_retry":
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Use edit-retry or new-session for a new Hermes session")
         task_request = TaskCreateRequest(
             prompt=request.prompt,
             project_id=original.project_id,
@@ -270,15 +300,73 @@ def create_app() -> FastAPI:
             requires_approval=request.requires_approval,
             parent_task_id=original.task_id,
             root_task_id=original.root_task_id or original.task_id,
-            session_id=None if request.new_session else original.session_id,
+            session_id=original.session_id,
             relation=request.relation,
         )
-        task_request = resolve_project_context(task_request)
-        task = await task_service.submit_task(task_request, on_update=broadcast_task_update)
-        await connections.broadcast_task_created(task)
-        if not task_request.requires_approval:
-            task_service.start_task(task, task_request, on_update=broadcast_task_update)
-        return task
+        return await submit_linked_task(task_request, idempotency_key=idempotency_key)
+
+    @app.post("/tasks/{task_id}/edit-retry", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
+    async def edit_retry_task(task_id: str, request: GuidanceRequest, idempotency_key: str | None = Header(default=None)) -> TaskSummary:
+        original = projection.get_task(task_id)
+        if original is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        _require_recovery_source(original)
+        task_request = TaskCreateRequest(
+            prompt=request.prompt,
+            project_id=original.project_id,
+            priority=original.priority,
+            source=original.source,
+            requires_approval=request.requires_approval,
+            parent_task_id=original.task_id,
+            root_task_id=original.root_task_id or original.task_id,
+            relation="edited_retry",
+        )
+        return await submit_linked_task(task_request, idempotency_key=idempotency_key)
+
+    @app.post("/tasks/{task_id}/new-session", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth), Depends(enforce_task_rate_limit)])
+    async def new_session_task(task_id: str, request: NewSessionRequest, idempotency_key: str | None = Header(default=None)) -> TaskSummary:
+        original = projection.get_task(task_id)
+        if original is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        _require_recovery_source(original)
+        task_request = TaskCreateRequest(
+            prompt=request.prompt or original.prompt,
+            project_id=original.project_id,
+            priority=original.priority,
+            source=original.source,
+            requires_approval=request.requires_approval,
+            parent_task_id=original.task_id,
+            root_task_id=original.root_task_id or original.task_id,
+            relation="retry",
+        )
+        return await submit_linked_task(task_request, idempotency_key=idempotency_key)
+
+    @app.get("/tasks/{task_id}/environment", dependencies=[Depends(require_auth)])
+    def check_task_environment(task_id: str) -> dict[str, bool | str | list[str] | None]:
+        task = projection.get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        issues: list[str] = []
+        project_ready = True
+        session_ready: bool | None = None
+        try:
+            resolve_project_context(request_from_task(task))
+        except HTTPException as exc:
+            project_ready = False
+            issues.append(str(exc.detail))
+        if task.session_id:
+            session_ready = project_ready
+        ready = project_ready and executor_ready()
+        if not executor_ready():
+            issues.append("Hermes executor is not ready")
+        return {
+            "task_id": task.task_id,
+            "ready": ready,
+            "project_ready": project_ready,
+            "session_ready": session_ready,
+            "executor_ready": executor_ready(),
+            "issues": issues,
+        }
 
     @app.get("/tasks/{task_id}", dependencies=[Depends(require_auth)])
     def get_task(task_id: str) -> TaskSummary:

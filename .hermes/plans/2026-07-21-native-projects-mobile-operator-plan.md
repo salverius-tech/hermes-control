@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** In progress.
-> **Progress:** 20 / 31 implementation tasks complete.
+> **Progress:** 21 / 31 implementation tasks complete.
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -268,7 +268,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
   **Evidence:** lineage projection tests across persisted reload.
 - [ ] **P5.2** Add latest-attempt/latest-outcome semantics and visible historical-to-latest links.  
   **Evidence:** API and mobile filtering tests for failed-then-completed lineage.
-- [ ] **P5.3** Implement guarded Continue current session, Edit before retry, Start new session, Check environment, and Cancel flows.  
+- [x] **P5.3** Implement guarded Continue current session, Edit before retry, Start new session, Check environment, and Cancel flows.
   **Evidence:** state-transition, session-validation, and idempotency tests.
 - [x] **P5.4** Capture/validate Hermes session identifiers and use supported continuation behavior.
   **Evidence:** continuation integration test and native session containment test.
@@ -323,6 +323,7 @@ Add entries here only after running the command against the current relevant rev
 | 2026-07-21 | P4.5 | `.venv/bin/python -m pytest services/control_api/tests/test_managed_workspace_api.py -q` | 13 passed | Append-only audit persistence/reload and authenticated per-slug timeline coverage. |
 | 2026-07-21 | P4.4 | `.venv/bin/python -m pytest -q services/control_api/tests` | 125 passed | Clean-profile restore preserves the manifest slug, makes the workspace primary, registers a present declared repository folder, and blocks an existing native record without replacement. |
 | 2026-07-21 | P5.4 | `.venv/bin/python -m pytest services/control_api/tests/test_native_project_integration.py services/control_api/tests/test_hermes_client.py -q` | 21 passed | Native session containment, stale-session rejection, and supported command continuation behavior. |
+| 2026-07-21 | P5.3 | `.venv/bin/python -m pytest services/control_api/tests -q` | 127 passed | Guarded active/archived recovery actions, session continuation validation, idempotent retry/continue/edit/new-session attempts, non-mutating environment checks, and cancellation coverage. |
 
 ## 10. Decision log
 

@@ -80,10 +80,14 @@ def test_retry_task_creates_new_task_with_original_prompt(monkeypatch):
         json={"prompt": "Retry this task", "project_id": "ops", "priority": "high"},
     ).json()
 
-    response = client.post(f"/tasks/{created['task_id']}/retry", headers={"Authorization": "Bearer dev-token"})
+    headers = {"Authorization": "Bearer dev-token", "Idempotency-Key": "retry-original"}
+    response = client.post(f"/tasks/{created['task_id']}/retry", headers=headers)
+    repeated = client.post(f"/tasks/{created['task_id']}/retry", headers=headers)
 
     assert response.status_code == 201
+    assert repeated.status_code == 201
     retried = response.json()
+    assert repeated.json()["task_id"] == retried["task_id"]
     assert retried["task_id"] != created["task_id"]
     assert retried["prompt"] == "Retry this task"
     assert retried["project_id"] == "ops"
@@ -127,7 +131,7 @@ def test_continue_task_creates_linked_continuation_with_same_session(monkeypatch
     assert continuation["relation"] == "continuation"
 
 
-def test_continue_task_creates_edited_retry_with_new_session(monkeypatch):
+def test_edit_retry_creates_edited_retry_with_new_session(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())
     created = client.post(
@@ -137,9 +141,9 @@ def test_continue_task_creates_edited_retry_with_new_session(monkeypatch):
     ).json()
 
     response = client.post(
-        f"/tasks/{created['task_id']}/continue",
+        f"/tasks/{created['task_id']}/edit-retry",
         headers={"Authorization": "Bearer dev-token"},
-        json={"prompt": "Edited instruction", "new_session": True, "relation": "edited_retry"},
+        json={"prompt": "Edited instruction"},
     )
 
     assert response.status_code == 201
@@ -212,3 +216,80 @@ def test_execution_folder_must_be_in_an_approved_root(monkeypatch, tmp_path):
 
     assert response.status_code == 400
     assert "approved project roots" in response.json()["detail"]
+
+
+def test_recovery_actions_are_guarded_when_original_task_is_active(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    created = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "Wait for approval", "session_id": "session-active", "requires_approval": True},
+    ).json()
+
+    retry = client.post(f"/tasks/{created['task_id']}/retry", headers=auth_headers())
+    continuation = client.post(
+        f"/tasks/{created['task_id']}/continue", headers=auth_headers(), json={"prompt": "Do not duplicate"}
+    )
+    edited = client.post(
+        f"/tasks/{created['task_id']}/edit-retry", headers=auth_headers(), json={"prompt": "Reworded"}
+    )
+    new_session = client.post(f"/tasks/{created['task_id']}/new-session", headers=auth_headers(), json={})
+
+    assert [response.status_code for response in (retry, continuation, edited, new_session)] == [409, 409, 409, 409]
+    assert client.get("/tasks", headers=auth_headers()).json()[0]["task_id"] == created["task_id"]
+
+
+def test_recovery_controls_are_linked_idempotent_and_environment_check_does_not_retry(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    created = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "Recover this safely", "session_id": "session-recovery", "requires_approval": True},
+    ).json()
+    canceled = client.post(f"/tasks/{created['task_id']}/cancel", headers=auth_headers())
+    repeated_cancel = client.post(f"/tasks/{created['task_id']}/cancel", headers=auth_headers())
+    assert canceled.status_code == 200
+    assert repeated_cancel.status_code == 409
+    event_count = len(client.get(f"/tasks/{created['task_id']}/events", headers=auth_headers()).json())
+
+    environment = client.get(f"/tasks/{created['task_id']}/environment", headers=auth_headers())
+    continuation_headers = {**auth_headers(), "Idempotency-Key": "continue-recovery"}
+    first_continue = client.post(
+        f"/tasks/{created['task_id']}/continue", headers=continuation_headers, json={"prompt": "Continue in place"}
+    )
+    second_continue = client.post(
+        f"/tasks/{created['task_id']}/continue", headers=continuation_headers, json={"prompt": "Continue in place"}
+    )
+    edited_headers = {**auth_headers(), "Idempotency-Key": "edit-recovery"}
+    edited = client.post(
+        f"/tasks/{created['task_id']}/edit-retry", headers=edited_headers, json={"prompt": "Edited recovery"}
+    )
+    edited_repeat = client.post(
+        f"/tasks/{created['task_id']}/edit-retry", headers=edited_headers, json={"prompt": "Edited recovery"}
+    )
+    new_session_headers = {**auth_headers(), "Idempotency-Key": "new-session-recovery"}
+    new_session = client.post(f"/tasks/{created['task_id']}/new-session", headers=new_session_headers, json={})
+    new_session_repeat = client.post(f"/tasks/{created['task_id']}/new-session", headers=new_session_headers, json={})
+
+    assert environment.status_code == 200
+    assert environment.json() == {
+        "task_id": created["task_id"],
+        "ready": False,
+        "project_ready": True,
+        "session_ready": True,
+        "executor_ready": False,
+        "issues": ["Hermes executor is not ready"],
+    }
+    assert len(client.get(f"/tasks/{created['task_id']}/events", headers=auth_headers()).json()) == event_count
+    assert first_continue.status_code == second_continue.status_code == 201
+    assert first_continue.json()["task_id"] == second_continue.json()["task_id"]
+    assert first_continue.json()["session_id"] == "session-recovery"
+    assert edited.json()["relation"] == "edited_retry"
+    assert edited.json()["task_id"] == edited_repeat.json()["task_id"]
+    assert edited.json()["session_id"] is None
+    assert new_session.json()["relation"] == "retry"
+    assert new_session.json()["task_id"] == new_session_repeat.json()["task_id"]
+    assert new_session.json()["prompt"] == "Recover this safely"
+    assert new_session.json()["session_id"] is None

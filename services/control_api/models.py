@@ -190,6 +190,23 @@ class GuidanceRequest(BaseModel):
         return stripped
 
 
+class NewSessionRequest(BaseModel):
+    """Create a linked independent attempt, optionally changing the prompt."""
+
+    prompt: str | None = None
+    requires_approval: bool = False
+
+    @field_validator("prompt")
+    @classmethod
+    def new_session_prompt_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("prompt must not be blank")
+        return stripped
+
+
 class ApprovalRequest(BaseModel):
     actor: str = "mobile-user"
     device_id: str | None = None
