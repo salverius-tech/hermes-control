@@ -298,10 +298,16 @@ def create_app() -> FastAPI:
                 continue
             assert manifest is not None
             registered = require_workspace().get_project(manifest.identity.slug)
+            if manifest.repository is not None and not (workspace_path / "repo").is_dir():
+                state = "missing_repository"
+            elif registered and Path(registered.primary_folder or "").resolve() != workspace_path:
+                state = "conflict"
+            else:
+                state = "already_registered" if registered else "ready"
             entries.append({
                 "workspace": str(workspace_path),
                 "slug": manifest.identity.slug,
-                "status": "already_registered" if registered else "ready",
+                "status": state,
             })
         return {"entries": entries}
 
