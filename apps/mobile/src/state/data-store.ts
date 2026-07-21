@@ -20,6 +20,15 @@ function mergeTask(tasks: TaskSummary[], next: TaskSummary) {
 async function readSeen(): Promise<Record<string, string>> { try { return JSON.parse((await AsyncStorage.getItem(ATTENTION_KEY)) || '{}') as Record<string, string>; } catch { return {}; } }
 async function unreadCount(tasks: TaskSummary[]): Promise<number> { const seen = await readSeen(); return attentionItems(tasks).filter((task) => seen[task.task_id] !== task.updated_at).length; }
 
+export function normalizeCachedData(cached: unknown): Partial<DataState> {
+  const data = cached && typeof cached === 'object' && !Array.isArray(cached) ? cached as Partial<DataState> : {};
+  const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+  const workThreads = Array.isArray(data.workThreads)
+    ? data.workThreads
+    : tasks.map((task) => ({ root_task_id: task.root_task_id || task.task_id, project_id: task.project_id, attempts: [task], latest_attempt: task, latest_outcome: task.status }));
+  return { ...data, workThreads };
+}
+
 type DataState = {
   tasks: TaskSummary[]; workThreads: WorkThreadSummary[]; projects: ProjectSummary[]; sessions: SessionSummary[]; agents: AgentStatus[]; attention: TaskSummary[]; queuedTasks: QueuedTask[]; diagnostics: Diagnostics | null;
   websocket: 'disconnected' | 'connecting' | 'connected'; websocketUrl: string | null; websocketError: string | null; websocketCloseCode: number | null; websocketCloseReason: string | null;
@@ -42,7 +51,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       const data = { tasks, workThreads, projects, sessions, agents, attention, queuedTasks, diagnostics, lastSync: new Date().toISOString(), stale: false, offline: false, unreadAttention: await unreadCount(tasks) };
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data)); set(data);
     } catch {
-      try { const cached = await AsyncStorage.getItem(CACHE_KEY); if (cached) set({ ...(JSON.parse(cached) as DataState), stale: true, offline: true }); else set({ stale: true, offline: true }); } catch { set({ stale: true, offline: true }); }
+      try { const cached = await AsyncStorage.getItem(CACHE_KEY); if (cached) set({ ...normalizeCachedData(JSON.parse(cached)), stale: true, offline: true }); else set({ stale: true, offline: true }); } catch { set({ stale: true, offline: true }); }
     }
   },
   connect() {
