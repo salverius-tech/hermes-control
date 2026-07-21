@@ -1,5 +1,5 @@
 export type NavigationItem = {
-  href: '/' | '/tasks' | '/attention' | '/new-task' | '/projects';
+  href: '/' | '/tasks' | '/attention' | '/new-task' | '/projects' | '/more';
   label: string;
   iconName: 'home' | 'list' | 'bell' | 'plus-circle' | 'folder';
   replace?: boolean;
@@ -10,7 +10,7 @@ export const navigationItems: NavigationItem[] = [
   { href: '/projects', label: 'Projects', iconName: 'folder', replace: true },
   { href: '/new-task', label: 'New', iconName: 'plus-circle', replace: true },
   { href: '/tasks', label: 'Activity', iconName: 'list', replace: true },
-  { href: '/attention', label: 'More', iconName: 'bell', replace: true },
+  { href: '/more', label: 'More', iconName: 'bell', replace: true },
 ];
 
 export function isActiveRoute(pathname: string, href: NavigationItem['href']): boolean {
