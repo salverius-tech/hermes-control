@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from services.control_api.git_adapter import GitCloneError
 from services.control_api.main import create_app
 from services.control_api.managed_workspace import MANIFEST_FILENAME, ProjectManifest
 from services.control_api.workspace import HermesWorkspaceStore
@@ -121,12 +122,12 @@ def test_managed_manifest_tracks_native_project_edits(monkeypatch, tmp_path):
 def test_clone_origin_clones_before_native_registration(monkeypatch, tmp_path):
     client, root = _client(monkeypatch, tmp_path)
 
-    def clone(command, **_kwargs):
-        assert command[:3] == ["git", "clone", "--"]
+    def clone(_adapter, remote, destination):
+        assert remote == "https://example.test/team/remote.git"
         (tmp_path / "marker").write_text("cloned")
-        Path(command[-1]).mkdir()
+        destination.mkdir()
 
-    monkeypatch.setattr("services.control_api.managed_workspace.subprocess.run", clone)
+    monkeypatch.setattr("services.control_api.managed_workspace.GitAdapter.clone", clone)
     response = client.post(
         "/projects",
         headers={"Authorization": "Bearer dev-token"},
@@ -156,9 +157,9 @@ def test_clone_failure_preserves_workspace_state(monkeypatch, tmp_path):
     client, root = _client(monkeypatch, tmp_path)
 
     def fail_clone(*_args, **_kwargs):
-        raise subprocess.CalledProcessError(128, ["git", "clone"])
+        raise GitCloneError("repository clone failed")
 
-    monkeypatch.setattr("services.control_api.managed_workspace.subprocess.run", fail_clone)
+    monkeypatch.setattr("services.control_api.managed_workspace.GitAdapter.clone", fail_clone)
     response = client.post(
         "/projects",
         headers={"Authorization": "Bearer dev-token"},
@@ -173,11 +174,11 @@ def test_clone_failure_preserves_workspace_state(monkeypatch, tmp_path):
 def test_clone_registration_failure_repair_preserves_repo(monkeypatch, tmp_path):
     client, root = _client(monkeypatch, tmp_path)
 
-    def clone(command, **_kwargs):
-        Path(command[-1]).mkdir()
+    def clone(_adapter, _remote, destination):
+        destination.mkdir()
 
     original_create = HermesWorkspaceStore.create_project
-    monkeypatch.setattr("services.control_api.managed_workspace.subprocess.run", clone)
+    monkeypatch.setattr("services.control_api.managed_workspace.GitAdapter.clone", clone)
     monkeypatch.setattr(HermesWorkspaceStore, "create_project", lambda *_: (_ for _ in ()).throw(RuntimeError("native failure")))
     headers = {"Authorization": "Bearer dev-token"}
     body = {"name": "Clone Repair", "origin": "clone", "repository_url": "https://example.test/team/repair.git"}

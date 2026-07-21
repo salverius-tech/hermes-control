@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +10,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .git_adapter import GitAdapter, GitCloneError
 from .models import ProjectCreateRequest, ProjectSummary
 from .workspace import HermesWorkspaceStore
 
@@ -82,6 +82,7 @@ class ManagedWorkspaceStore:
     def __init__(self, native: HermesWorkspaceStore, root: str | Path) -> None:
         self.native = native
         self.root = Path(root).expanduser().resolve()
+        self.git = GitAdapter()
 
     @property
     def ready(self) -> bool:
@@ -163,8 +164,8 @@ class ManagedWorkspaceStore:
         staging.replace(workspace)
         repo = workspace / "repo"
         try:
-            subprocess.run(["git", "clone", "--", remote, str(repo)], check=True, capture_output=True, text=True, timeout=300)
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            self.git.clone(remote, repo)
+        except GitCloneError as exc:
             self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"repository_clone": "clone_failed"})}))
             raise ValueError("repository clone failed") from exc
         manifest = manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"repository_clone": "cloned"})})
