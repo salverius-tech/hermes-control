@@ -1,6 +1,6 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
-> **Status:** Proposed; implementation has not been approved.  
+> **Status:** In progress.
 > **Progress:** 17 / 31 implementation tasks complete.
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
