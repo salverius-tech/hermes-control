@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from services.control_api.git_adapter import GitCloneError
 from services.control_api.main import create_app
 from services.control_api.managed_workspace import MANIFEST_FILENAME, ProjectManifest
+from services.control_api.models import ProjectCreateRequest
 from services.control_api.recovery_audit import RecoveryAuditStore
 from services.control_api.workspace import HermesWorkspaceStore
 
@@ -220,6 +221,88 @@ def test_recovery_plan_is_read_only_and_reports_registered_workspace(monkeypatch
     response = client.get("/recovery-plan", headers=headers)
     assert response.status_code == 200
     assert response.json() == {"entries": [{"workspace": str(root / "recovered"), "slug": "recovered", "status": "already_registered"}]}
+
+
+def test_recovery_plan_reports_malformed_manifest_as_blocked(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    workspace = root / "invalid"
+    workspace.mkdir()
+    (workspace / MANIFEST_FILENAME).write_text("schema_version: 2\n", encoding="utf-8")
+
+    response = client.get("/recovery-plan", headers={"Authorization": "Bearer dev-token"})
+
+    assert response.status_code == 200
+    entry = response.json()["entries"]
+    assert entry[0]["workspace"] == str(workspace)
+    assert entry[0]["status"] == "blocked"
+    assert "unsupported manifest schema version" in entry[0]["detail"]
+
+
+def test_recovery_plan_reports_declared_repository_missing_directory(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+
+    def clone(_adapter, _remote, destination):
+        destination.mkdir()
+
+    monkeypatch.setattr("services.control_api.managed_workspace.GitAdapter.clone", clone)
+    assert client.post(
+        "/projects",
+        headers=headers,
+        json={"name": "Missing Repository", "origin": "clone", "repository_url": "https://example.test/team/missing.git"},
+    ).status_code == 201
+    (root / "missing-repository" / "repo").rmdir()
+
+    response = client.get("/recovery-plan", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"entries": [{
+        "workspace": str(root / "missing-repository"),
+        "slug": "missing-repository",
+        "status": "missing_repository",
+    }]}
+
+
+@pytest.mark.parametrize("payload", [
+    {"slugs": ["confirmation"]},
+    {"slugs": ["confirmation"], "confirm": False},
+])
+def test_recovery_apply_requires_explicit_true_confirmation(monkeypatch, tmp_path, payload):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    assert client.post("/projects", headers=headers, json={"name": "Confirmation", "origin": "workspace"}).status_code == 201
+    with sqlite3.connect(tmp_path / "hermes" / "projects.db") as db:
+        db.execute("DELETE FROM project_folders WHERE project_id IN (SELECT id FROM projects WHERE slug = ?)", ("confirmation",))
+        db.execute("DELETE FROM projects WHERE slug = ?", ("confirmation",))
+
+    response = client.post("/recovery-plan/apply", headers=headers, json=payload)
+
+    assert response.status_code == 422
+    assert HermesWorkspaceStore(tmp_path / "hermes").get_project("confirmation") is None
+    assert (root / "confirmation").is_dir()
+
+
+def test_recovery_apply_revalidates_native_registration_before_creating(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    assert client.post("/projects", headers=headers, json={"name": "Race", "origin": "workspace"}).status_code == 201
+    with sqlite3.connect(tmp_path / "hermes" / "projects.db") as db:
+        db.execute("DELETE FROM project_folders WHERE project_id IN (SELECT id FROM projects WHERE slug = ?)", ("race",))
+        db.execute("DELETE FROM projects WHERE slug = ?", ("race",))
+    assert client.get("/recovery-plan", headers=headers).json()["entries"][0]["status"] == "ready"
+
+    HermesWorkspaceStore(tmp_path / "hermes").create_project(ProjectCreateRequest(
+        name="Externally Restored",
+        slug="race",
+        folders=[str(root / "race")],
+        primary_folder=str(root / "race"),
+    ))
+    response = client.post("/recovery-plan/apply", headers=headers, json={"slugs": ["race"], "confirm": True})
+
+    assert response.json() == {"results": [{"slug": "race", "status": "blocked"}]}
+    project = HermesWorkspaceStore(tmp_path / "hermes").get_project("race")
+    assert project is not None
+    assert project.name == "Externally Restored"
 
 
 def test_recovery_audit_store_persists_timeline_after_reload(tmp_path):
