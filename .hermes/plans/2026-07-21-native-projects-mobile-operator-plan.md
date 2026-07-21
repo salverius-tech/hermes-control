@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** In progress.
-> **Progress:** 24 / 31 implementation tasks complete.
+> **Progress:** 25 / 37 implementation tasks complete.
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -272,7 +272,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
   **Evidence:** state-transition, session-validation, and idempotency tests.
 - [x] **P5.4** Capture/validate Hermes session identifiers and use supported continuation behavior.
   **Evidence:** continuation integration test and native session containment test.
-- [ ] **P5.5** Add activity-aware task state fields/events and distinguish quiet-but-alive, missing-heartbeat, interrupted, blocked, failed, and completed outcomes.  
+- [x] **P5.5** Add activity-aware task state fields/events and distinguish quiet-but-alive, missing-heartbeat, interrupted, blocked, failed, and completed outcomes.
   **Evidence:** targeted bridge/API tests for each transition.
 
 ## Phase 6 — Mobile information architecture and screens
