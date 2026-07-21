@@ -74,6 +74,7 @@ def test_manifest_rejects_unknown_schema_extra_fields_and_unsafe_paths():
 
 def test_workspace_registration_failure_preserves_repairable_workspace(monkeypatch, tmp_path):
     client, root = _client(monkeypatch, tmp_path)
+    original_create = HermesWorkspaceStore.create_project
     monkeypatch.setattr(HermesWorkspaceStore, "create_project", lambda *_: (_ for _ in ()).throw(RuntimeError("native failure")))
 
     response = client.post(
@@ -87,6 +88,15 @@ def test_workspace_registration_failure_preserves_repairable_workspace(monkeypat
     assert workspace.is_dir()
     assert "native_registration: registration_failed" in (workspace / MANIFEST_FILENAME).read_text()
     assert not list(root.glob(".recoverable.creating-*"))
+
+    monkeypatch.setattr(HermesWorkspaceStore, "create_project", original_create)
+    repaired = client.post(
+        "/projects",
+        headers={"Authorization": "Bearer dev-token"},
+        json={"name": "Recoverable", "origin": "workspace"},
+    )
+    assert repaired.status_code == 201
+    assert "native_registration: registered" in (workspace / MANIFEST_FILENAME).read_text()
 
 
 def test_managed_manifest_tracks_native_project_edits(monkeypatch, tmp_path):

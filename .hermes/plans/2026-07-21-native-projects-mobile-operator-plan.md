@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** Proposed; implementation has not been approved.  
-> **Progress:** 10 / 31 implementation tasks complete.  
+> **Progress:** 11 / 31 implementation tasks complete.  
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -232,7 +232,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
   **Evidence:** integration test against native-project SQLite fixture.
 - [x] **P2.5** Synchronize native project edits/folder/archive operations to a managed workspace manifest; do not create manifests for adopted legacy projects unless explicitly adopted later.  
   **Evidence:** update and archive synchronization tests.
-- [ ] **P2.6** Add repair-state behavior for workspace exists/native registration failed.  
+- [x] **P2.6** Add repair-state behavior for workspace exists/native registration failed.  
   **Evidence:** failed-registration recovery test and clear API error/result contract.
 
 ## Phase 3 — Repository lifecycle
@@ -316,6 +316,7 @@ Add entries here only after running the command against the current relevant rev
 | 2026-07-21 | P2.2 | `.venv/bin/python -m pytest services/control_api/tests -q` | 98 passed | Schema-version, extra-field, and relative-path manifest validation. |
 | 2026-07-21 | P2.3 | `.venv/bin/python -m pytest services/control_api/tests -q` | 99 passed | Collision, staged workspace creation, and recoverable native-registration failure handling. |
 | 2026-07-21 | P2.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 100 passed | Managed-manifest edit/archive synchronization. |
+| 2026-07-21 | P2.6 | `.venv/bin/python -m pytest services/control_api/tests -q` | 100 passed | Failed native registration is repairable by reissuing the workspace-create request. |
 
 ## 10. Decision log
 
