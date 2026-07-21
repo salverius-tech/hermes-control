@@ -367,10 +367,15 @@ def create_app() -> FastAPI:
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    def synchronize_managed_project(project: ProjectSummary) -> ProjectSummary:
+        if managed_workspace is not None:
+            managed_workspace.synchronize_project(project)
+        return project
+
     @app.patch("/projects/{project_id}", dependencies=[Depends(require_auth)])
     def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectSummary:
         try:
-            return require_workspace().update_project(project_id, request)
+            return synchronize_managed_project(require_workspace().update_project(project_id, request))
         except KeyError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found") from exc
         except (RuntimeError, ValueError) as exc:
@@ -379,7 +384,7 @@ def create_app() -> FastAPI:
     @app.post("/projects/{project_id}/folders", dependencies=[Depends(require_auth)])
     def add_project_folder(project_id: str, request: FolderRequest) -> ProjectSummary:
         try:
-            return require_workspace().add_folder(project_id, request.path)
+            return synchronize_managed_project(require_workspace().add_folder(project_id, request.path))
         except KeyError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found") from exc
         except (RuntimeError, ValueError) as exc:
@@ -388,7 +393,7 @@ def create_app() -> FastAPI:
     @app.delete("/projects/{project_id}/folders", dependencies=[Depends(require_auth)])
     def remove_project_folder(project_id: str, request: FolderRequest) -> ProjectSummary:
         try:
-            return require_workspace().remove_folder(project_id, request.path)
+            return synchronize_managed_project(require_workspace().remove_folder(project_id, request.path))
         except KeyError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found") from exc
         except (RuntimeError, ValueError) as exc:

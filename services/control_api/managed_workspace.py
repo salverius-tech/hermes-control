@@ -134,6 +134,28 @@ class ManagedWorkspaceStore:
             raise ValueError("workspace is outside the managed workspace root")
         return ProjectManifest.model_validate(yaml.safe_load((workspace_path / MANIFEST_FILENAME).read_text(encoding="utf-8")))
 
+    def synchronize_project(self, project: ProjectSummary) -> None:
+        """Mirror native changes only when a managed manifest already exists."""
+        if not project.primary_folder:
+            return
+        workspace = Path(project.primary_folder).resolve()
+        manifest_path = workspace / MANIFEST_FILENAME
+        if not workspace.is_relative_to(self.root) or not manifest_path.is_file():
+            return
+        manifest = self.read_manifest(workspace)
+        folders: list[ManifestFolder] = []
+        for folder in project.folders:
+            path = Path(folder).resolve()
+            if not path.is_relative_to(workspace):
+                return
+            relative = str(path.relative_to(workspace)) or "."
+            folders.append(ManifestFolder(path=relative, role="repository" if relative == "repo" else "workspace", primary=path == workspace))
+        self.write_manifest(workspace, manifest.model_copy(update={
+            "identity": manifest.identity.model_copy(update={"name": project.name, "description": project.description}),
+            "workspace": manifest.workspace.model_copy(update={"folders": folders, "primary_folder": "."}),
+            "lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "archived" if project.archived else "registered"}),
+        }))
+
     @staticmethod
     def _slug(value: str) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")

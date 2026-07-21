@@ -87,3 +87,16 @@ def test_workspace_registration_failure_preserves_repairable_workspace(monkeypat
     assert workspace.is_dir()
     assert "native_registration: registration_failed" in (workspace / MANIFEST_FILENAME).read_text()
     assert not list(root.glob(".recoverable.creating-*"))
+
+
+def test_managed_manifest_tracks_native_project_edits(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+    assert client.post("/projects", headers=headers, json={"name": "Garden", "origin": "workspace"}).status_code == 201
+
+    updated = client.patch("/projects/garden", headers=headers, json={"name": "Garden Notes", "description": "Updated"})
+
+    assert updated.status_code == 200
+    manifest = (root / "garden" / MANIFEST_FILENAME).read_text()
+    assert "name: Garden Notes" in manifest
+    assert "description: Updated" in manifest
