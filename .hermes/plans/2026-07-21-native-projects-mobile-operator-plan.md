@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** In progress.
-> **Progress:** 17 / 31 implementation tasks complete.
+> **Progress:** 19 / 31 implementation tasks complete.
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -258,7 +258,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
   **Evidence:** confirm/cancel tests; changed manifest after plan generation is revalidated.
 - [ ] **P4.4** Recreate missing native Hermes Projects with stable slug, workspace primary folder, and present optional repo folder; never overwrite existing records.  
   **Evidence:** clean-profile restoration integration test.
-- [ ] **P4.5** Add durable recovery audit events and per-project result reporting.  
+- [x] **P4.5** Add durable recovery audit events and per-project result reporting.
   **Evidence:** persistence/reload and API timeline tests.
 
 ## Phase 5 — Work-thread projection and task recovery
@@ -269,7 +269,7 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
   **Evidence:** API and mobile filtering tests for failed-then-completed lineage.
 - [ ] **P5.3** Implement guarded Continue current session, Edit before retry, Start new session, Check environment, and Cancel flows.  
   **Evidence:** state-transition, session-validation, and idempotency tests.
-- [ ] **P5.4** Capture/validate Hermes session identifiers and use supported continuation behavior.  
+- [x] **P5.4** Capture/validate Hermes session identifiers and use supported continuation behavior.
   **Evidence:** continuation integration test and native session containment test.
 - [ ] **P5.5** Add activity-aware task state fields/events and distinguish quiet-but-alive, missing-heartbeat, interrupted, blocked, failed, and completed outcomes.  
   **Evidence:** targeted bridge/API tests for each transition.
@@ -319,6 +319,8 @@ Add entries here only after running the command against the current relevant rev
 | 2026-07-21 | P2.6 | `.venv/bin/python -m pytest services/control_api/tests -q` | 100 passed | Failed native registration is repairable by reissuing the workspace-create request. |
 | 2026-07-21 | P3.1–P3.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 105 passed | Managed repository lifecycle, clone failure repair, and repository attachment coverage. |
 | 2026-07-21 | P5.1 | `.venv/bin/python -m pytest services/control_api/tests -q` | 109 passed | Work-thread projection, read APIs, root/retry latest-outcome behavior, and SQLite reload lineage coverage. |
+| 2026-07-21 | P4.5 | `.venv/bin/python -m pytest services/control_api/tests/test_managed_workspace_api.py -q` | 13 passed | Append-only audit persistence/reload and authenticated per-slug timeline coverage. |
+| 2026-07-21 | P5.4 | `.venv/bin/python -m pytest services/control_api/tests/test_native_project_integration.py services/control_api/tests/test_hermes_client.py -q` | 21 passed | Native session containment, stale-session rejection, and supported command continuation behavior. |
 
 ## 10. Decision log
 
