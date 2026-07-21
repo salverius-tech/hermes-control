@@ -18,6 +18,7 @@ from .models import (
     FolderRequest,
     GuidanceRequest,
     ProjectCreateRequest,
+    RecoveryApplyRequest,
     RepositoryAttachRequest,
     ProjectSummary,
     ProjectUpdateRequest,
@@ -286,6 +287,28 @@ def create_app() -> FastAPI:
     @app.get("/attention", dependencies=[Depends(require_auth)])
     def list_attention() -> list[TaskSummary]:
         return [task for task in projection.list_tasks() if task.status in {"awaiting_approval", "attention_required", "failed", "blocked"}]
+
+    @app.post("/recovery-plan/apply", dependencies=[Depends(require_auth)])
+    def apply_recovery_plan(request: RecoveryApplyRequest) -> dict[str, list[dict[str, str]]]:
+        if managed_workspace is None:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
+        manifests = {manifest.identity.slug: (path, manifest) for path, manifest, error in managed_workspace.discover_manifests() if manifest is not None and error is None}
+        results = []
+        for slug in request.slugs:
+            entry = manifests.get(slug)
+            if entry is None or require_workspace().get_project(slug) is not None:
+                results.append({"slug": slug, "status": "blocked"})
+                continue
+            workspace_path, manifest = entry
+            folders = [str(workspace_path)]
+            if manifest.repository is not None and (workspace_path / "repo").is_dir():
+                folders.append(str(workspace_path / "repo"))
+            try:
+                require_workspace().create_project(ProjectCreateRequest(name=manifest.identity.name, slug=slug, description=manifest.identity.description, folders=folders, primary_folder=str(workspace_path)))
+                results.append({"slug": slug, "status": "restored"})
+            except (RuntimeError, ValueError):
+                results.append({"slug": slug, "status": "blocked"})
+        return {"results": results}
 
     @app.get("/recovery-plan", dependencies=[Depends(require_auth)])
     def recovery_plan() -> dict[str, list[dict[str, str]]]:
