@@ -45,6 +45,15 @@ export type WorkThreadSummary = {
   latest_outcome: TaskStatus;
 };
 
+export type TaskEnvironment = {
+  task_id: string;
+  ready: boolean;
+  project_ready: boolean;
+  session_ready: boolean | null;
+  executor_ready: boolean;
+  issues: string[];
+};
+
 export type ProjectSummary = {
   project_id: string;
   name: string;

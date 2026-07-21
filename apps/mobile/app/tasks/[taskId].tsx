@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { readCache, writeCache } from '@/api/cache';
 import { apiFetch, TaskEvent, TaskSummary, WorkThreadSummary } from '@/api/client';
 import { ExpandableDetails } from '@/components/ExpandableDetails';
+import { approvalDecisionLabel, latestApprovalAudit } from '@/features/tasks/approval-audit';
 import { MetricCard } from '@/components/MetricCard';
 import { MetadataRow } from '@/components/MetadataRow';
 import { bottomNavigationHeight } from '@/navigation/constants';
@@ -159,6 +160,7 @@ export default function TaskDetailScreen() {
   const canRecover = task?.status === 'failed' || task?.status === 'blocked' || task?.status === 'completed';
   const canCancel = task?.status === 'queued' || task?.status === 'running' || task?.status === 'awaiting_approval';
   const canArchive = task && !canCancel && !['awaiting_approval', 'queued', 'running'].includes(task.status);
+  const approvalAudit = latestApprovalAudit(events);
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}> 
@@ -237,6 +239,13 @@ export default function TaskDetailScreen() {
               ) : null}
               {canArchive ? <Pressable accessibilityRole="button" disabled={actionPending || offline || stale} onPress={confirmArchive} style={[styles.archiveButton, (actionPending || offline || stale) && styles.disabledButton]} testID="task-archive"><Text style={styles.archiveButtonText}>{task.archived_at ? 'Restore to inbox' : 'Remove from inbox'}</Text></Pressable> : null}
             </View>
+            {approvalAudit ? <View style={styles.approvalAudit}>
+              <Text style={styles.approvalHeading}>Approval audit · {approvalDecisionLabel(approvalAudit.status)}</Text>
+              <MetadataRow label="Actor" value={approvalAudit.actor} />
+              <MetadataRow label="Device" value={approvalAudit.deviceId} />
+              <MetadataRow label="Reason" value={approvalAudit.reason} />
+              <MetadataRow label="Recorded" value={approvalAudit.createdAt} />
+            </View> : null}
           </MetricCard>
 
           <ExpandableDetails label="Task context">
@@ -277,6 +286,8 @@ export default function TaskDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  approvalAudit: { borderTopColor: colors.border, borderTopWidth: 1, gap: spacing.xs, marginTop: spacing.md, paddingTop: spacing.md },
+  approvalHeading: { color: colors.text, fontSize: 14, fontWeight: '800' },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
