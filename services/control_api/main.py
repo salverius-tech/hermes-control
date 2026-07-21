@@ -23,6 +23,7 @@ from .models import (
     ProjectSummary,
     ProjectUpdateRequest,
     SessionSummary,
+    WorkThreadSummary,
     TaskCreateRequest,
     TaskEvent,
     TaskSummary,
@@ -315,6 +316,17 @@ def create_app() -> FastAPI:
             except (RuntimeError, ValueError):
                 results.append({"slug": slug, "status": "blocked"})
         return {"results": results}
+
+    @app.get("/work-threads", response_model=list[WorkThreadSummary], dependencies=[Depends(require_auth)])
+    def list_work_threads(project_id: str | None = None, include_archived: bool = False) -> list[WorkThreadSummary]:
+        return projection.list_work_threads(project_id=project_id, include_archived=include_archived)
+
+    @app.get("/work-threads/{root_task_id}", response_model=WorkThreadSummary, dependencies=[Depends(require_auth)])
+    def get_work_thread(root_task_id: str) -> WorkThreadSummary:
+        thread = next((thread for thread in projection.list_work_threads(include_archived=True) if thread.root_task_id == root_task_id), None)
+        if thread is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="work thread not found")
+        return thread
 
     @app.get("/recovery-plan", dependencies=[Depends(require_auth)])
     def recovery_plan() -> dict[str, list[dict[str, str]]]:
