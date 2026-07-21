@@ -140,6 +140,8 @@ class ProjectCreateRequest(BaseModel):
     description: str | None = None
     folders: list[str] = Field(default_factory=list)
     primary_folder: str | None = None
+    origin: Literal["adopt", "workspace", "clone"] = "adopt"
+    repository_url: str | None = None
 
 
 class ProjectUpdateRequest(BaseModel):

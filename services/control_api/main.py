@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket,
 
 from .auth import expected_token, require_auth
 from .hermes_client import HermesTaskService
+from .managed_workspace import ManagedWorkspaceStore
 from .models import (
     AgentStatus,
     ApprovalRequest,
@@ -39,6 +40,11 @@ def create_app() -> FastAPI:
     hermes_home = os.getenv("CONTROL_API_HERMES_HOME")
     allow_synthetic_projects = os.getenv("CONTROL_API_ALLOW_SYNTHETIC_PROJECTS") == "1"
     workspace = HermesWorkspaceStore(hermes_home) if hermes_home else None
+    managed_workspace = (
+        ManagedWorkspaceStore(workspace, os.environ["CONTROL_API_WORKSPACE_ROOT"])
+        if workspace is not None and os.getenv("CONTROL_API_WORKSPACE_ROOT")
+        else None
+    )
     projection = TaskProjection(
         store=store,
         workspace=workspace,
@@ -143,6 +149,7 @@ def create_app() -> FastAPI:
             "native_projects_configured": str(workspace is not None).lower(),
             "hermes_home_available": str(bool(workspace and workspace.available)).lower(),
             "synthetic_projects_enabled": str(allow_synthetic_projects).lower(),
+            "managed_workspace_ready": str(bool(managed_workspace and managed_workspace.ready)).lower(),
             "bridge_configured": str(bool(plugin_socket)).lower(),
             "bridge_socket_available": str(bool(plugin_socket and Path(plugin_socket).exists())).lower(),
             "executor_ready": str(bool((plugin_socket and Path(plugin_socket).exists()) or command_ready)).lower(),
@@ -350,6 +357,12 @@ def create_app() -> FastAPI:
     @app.post("/projects", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_auth)])
     def create_project(request: ProjectCreateRequest) -> ProjectSummary:
         try:
+            if request.origin == "workspace":
+                if managed_workspace is None:
+                    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
+                return managed_workspace.create_workspace_project(request)
+            if request.origin == "clone":
+                raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Repository cloning is not implemented yet")
             return require_workspace().create_project(request)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
