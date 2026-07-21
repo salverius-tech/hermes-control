@@ -99,9 +99,12 @@ class ManagedWorkspaceStore:
             if manifest_path.is_file():
                 manifest = self.read_manifest(workspace)
                 if manifest.identity.slug == slug and manifest.lifecycle.native_registration == "registration_failed" and self.native.get_project(slug) is None:
+                    folders = [str(workspace)]
+                    if manifest.lifecycle.repository_clone == "cloned" and (workspace / "repo").is_dir():
+                        folders.append(str(workspace / "repo"))
                     project = self.native.create_project(request.model_copy(update={
                         "slug": slug,
-                        "folders": [str(workspace)],
+                        "folders": folders,
                         "primary_folder": str(workspace),
                     }))
                     self.write_manifest(workspace, manifest.model_copy(update={
@@ -141,8 +144,10 @@ class ManagedWorkspaceStore:
         remote = self._repository_url(request.repository_url)
         slug = self._slug(request.slug or request.name)
         workspace = (self.root / slug).resolve()
-        if not workspace.is_relative_to(self.root) or workspace.exists():
-            raise ValueError(f"workspace already exists: {slug}")
+        if not workspace.is_relative_to(self.root):
+            raise ValueError("workspace is outside the managed workspace root")
+        if workspace.exists():
+            return self.create_workspace_project(request)
         staging = self.root / f".{slug}.creating-{uuid.uuid4().hex}"
         staging.mkdir()
         (staging / "notes").mkdir()

@@ -168,3 +168,23 @@ def test_clone_failure_preserves_workspace_state(monkeypatch, tmp_path):
     manifest = (root / "broken-remote" / MANIFEST_FILENAME).read_text()
     assert "repository_clone: clone_failed" in manifest
     assert "native_registration: pending" in manifest
+
+
+def test_clone_registration_failure_repair_preserves_repo(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+
+    def clone(command, **_kwargs):
+        Path(command[-1]).mkdir()
+
+    original_create = HermesWorkspaceStore.create_project
+    monkeypatch.setattr("services.control_api.managed_workspace.subprocess.run", clone)
+    monkeypatch.setattr(HermesWorkspaceStore, "create_project", lambda *_: (_ for _ in ()).throw(RuntimeError("native failure")))
+    headers = {"Authorization": "Bearer dev-token"}
+    body = {"name": "Clone Repair", "origin": "clone", "repository_url": "https://example.test/team/repair.git"}
+    assert client.post("/projects", headers=headers, json=body).status_code == 400
+
+    monkeypatch.setattr(HermesWorkspaceStore, "create_project", original_create)
+    repaired = client.post("/projects", headers=headers, json=body)
+    assert repaired.status_code == 201
+    workspace = root / "clone-repair"
+    assert repaired.json()["folders"] == [str(workspace), str(workspace / "repo")]
