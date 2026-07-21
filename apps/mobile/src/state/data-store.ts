@@ -59,7 +59,12 @@ export const useDataStore = create<DataState>((set, get) => ({
     let stopped = false;
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconciliationTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
+    const reconcile = () => {
+      if (stopped || reconciliationTimer) return;
+      reconciliationTimer = setTimeout(() => { reconciliationTimer = null; void get().refresh(); }, 250);
+    };
     const websocketUrl = redactWebSocketUrl(buildWebSocketUrl(apiUrl, apiToken));
 
     const scheduleReconnect = () => {
@@ -82,18 +87,20 @@ export const useDataStore = create<DataState>((set, get) => ({
           const attention = attentionItems(event.tasks);
           set({ tasks: event.tasks, projects: event.projects, agents: event.agents, attention, stale: false, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: false });
           void unreadCount(event.tasks).then((unreadAttention) => set({ unreadAttention }));
+          reconcile();
         } else {
           const lastEventSequence = get().lastEventSequence;
           const expected = lastEventSequence === null ? event.seq : lastEventSequence + 1;
           const gap = event.seq !== expected;
           set((state) => { const tasks = mergeTask(state.tasks, event.task); return { tasks, attention: attentionItems(tasks), stale: gap, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: gap }; });
           if (gap) void get().refresh();
+          else reconcile();
           void unreadCount(get().tasks).then((unreadAttention) => set({ unreadAttention }));
         }
       };
     };
     open();
-    return () => { stopped = true; if (reconnectTimer) clearTimeout(reconnectTimer); reconnectTimer = null; socket?.close(); };
+    return () => { stopped = true; if (reconnectTimer) clearTimeout(reconnectTimer); if (reconciliationTimer) clearTimeout(reconciliationTimer); reconnectTimer = null; reconciliationTimer = null; socket?.close(); };
   },
   async markAttentionSeen(taskId) { const seen = await readSeen(); const item = get().attention.find((task) => task.task_id === taskId); if (item) seen[taskId] = item.updated_at; await AsyncStorage.setItem(ATTENTION_KEY, JSON.stringify(seen)); set({ unreadAttention: get().attention.filter((task) => seen[task.task_id] !== task.updated_at).length }); },
 }));
