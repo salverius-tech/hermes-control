@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from services.control_api.main import create_app
 from services.control_api.managed_workspace import MANIFEST_FILENAME, ProjectManifest
+from services.control_api.workspace import HermesWorkspaceStore
 
 pytestmark = pytest.mark.integration
 
@@ -69,3 +70,20 @@ def test_manifest_rejects_unknown_schema_extra_fields_and_unsafe_paths():
     unsafe = {**valid, "workspace": {"folders": [{"path": "../outside", "role": "workspace", "primary": True}]}}
     with pytest.raises(ValidationError, match="relative and contained"):
         ProjectManifest.model_validate(unsafe)
+
+
+def test_workspace_registration_failure_preserves_repairable_workspace(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    monkeypatch.setattr(HermesWorkspaceStore, "create_project", lambda *_: (_ for _ in ()).throw(RuntimeError("native failure")))
+
+    response = client.post(
+        "/projects",
+        headers={"Authorization": "Bearer dev-token"},
+        json={"name": "Recoverable", "origin": "workspace"},
+    )
+
+    assert response.status_code == 400
+    workspace = root / "recoverable"
+    assert workspace.is_dir()
+    assert "native_registration: registration_failed" in (workspace / MANIFEST_FILENAME).read_text()
+    assert not list(root.glob(".recoverable.creating-*"))
