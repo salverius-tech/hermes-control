@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -114,3 +115,25 @@ def test_managed_manifest_tracks_native_project_edits(monkeypatch, tmp_path):
     archived = client.patch("/projects/garden", headers=headers, json={"archived": True})
     assert archived.status_code == 200
     assert "native_registration: archived" in (root / "garden" / MANIFEST_FILENAME).read_text()
+
+
+def test_clone_origin_clones_before_native_registration(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+
+    def clone(command, **_kwargs):
+        assert command[:3] == ["git", "clone", "--"]
+        (tmp_path / "marker").write_text("cloned")
+        Path(command[-1]).mkdir()
+
+    monkeypatch.setattr("services.control_api.managed_workspace.subprocess.run", clone)
+    response = client.post(
+        "/projects",
+        headers={"Authorization": "Bearer dev-token"},
+        json={"name": "Remote", "origin": "clone", "repository_url": "https://example.test/team/remote.git"},
+    )
+
+    assert response.status_code == 201
+    workspace = root / "remote"
+    assert (workspace / "repo").is_dir()
+    assert "remote_url: https://example.test/team/remote.git" in (workspace / MANIFEST_FILENAME).read_text()
+    assert response.json()["folders"] == [str(workspace), str(workspace / "repo")]

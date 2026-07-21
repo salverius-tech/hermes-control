@@ -362,7 +362,9 @@ def create_app() -> FastAPI:
                     raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
                 return managed_workspace.create_workspace_project(request)
             if request.origin == "clone":
-                raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Repository cloning is not implemented yet")
+                if managed_workspace is None:
+                    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Managed workspace root is not configured")
+                return managed_workspace.create_clone_project(request)
             return require_workspace().create_project(request)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
+import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,6 +132,37 @@ class ManagedWorkspaceStore:
         }))
         return project
 
+    def create_clone_project(self, request: ProjectCreateRequest) -> ProjectSummary:
+        """Clone a remote before registering the native Hermes project."""
+        if not self.ready:
+            raise ValueError("managed workspace root is unavailable or not writable")
+        remote = self._repository_url(request.repository_url)
+        slug = self._slug(request.slug or request.name)
+        workspace = (self.root / slug).resolve()
+        if not workspace.is_relative_to(self.root) or workspace.exists():
+            raise ValueError(f"workspace already exists: {slug}")
+        staging = self.root / f".{slug}.creating-{uuid.uuid4().hex}"
+        staging.mkdir()
+        (staging / "notes").mkdir()
+        (staging / "artifacts").mkdir()
+        (staging / "README.md").write_text(f"# {request.name.strip()}\n", encoding="utf-8")
+        manifest = self._manifest(request, slug, "pending").model_copy(update={"repository": ManifestRepository(remote_url=remote)})
+        self.write_manifest(staging, manifest)
+        staging.replace(workspace)
+        repo = workspace / "repo"
+        try:
+            subprocess.run(["git", "clone", "--", remote, str(repo)], check=True, capture_output=True, text=True, timeout=300)
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "clone_failed"})}))
+            raise ValueError("repository clone failed") from exc
+        try:
+            project = self.native.create_project(request.model_copy(update={"slug": slug, "folders": [str(workspace), str(repo)], "primary_folder": str(workspace)}))
+        except Exception:
+            self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "registration_failed"})}))
+            raise
+        self.write_manifest(workspace, manifest.model_copy(update={"lifecycle": manifest.lifecycle.model_copy(update={"native_registration": "registered"})}))
+        return project
+
     def write_manifest(self, workspace: str | Path, manifest: ProjectManifest) -> None:
         workspace_path = Path(workspace).resolve()
         if not workspace_path.is_relative_to(self.root):
@@ -175,6 +206,18 @@ class ManagedWorkspaceStore:
         if not slug:
             raise ValueError("project slug must contain letters or numbers")
         return slug
+
+    @staticmethod
+    def _repository_url(value: str | None) -> str:
+        if not value or not value.strip() or value.startswith("-"):
+            raise ValueError("repository URL is required")
+        remote = value.strip()
+        if not re.match(r"^(https://|ssh://|git@)[^\s]+$", remote):
+            raise ValueError("repository URL must use HTTPS or SSH")
+        host = remote.split("://", 1)[-1].split("/", 1)[0]
+        if "@" in host and not remote.startswith("git@"):
+            raise ValueError("repository URL must not include credentials")
+        return remote
 
     @staticmethod
     def _manifest(request: ProjectCreateRequest, slug: str, registration: str) -> ProjectManifest:
