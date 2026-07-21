@@ -100,3 +100,7 @@ def test_managed_manifest_tracks_native_project_edits(monkeypatch, tmp_path):
     manifest = (root / "garden" / MANIFEST_FILENAME).read_text()
     assert "name: Garden Notes" in manifest
     assert "description: Updated" in manifest
+
+    archived = client.patch("/projects/garden", headers=headers, json={"archived": True})
+    assert archived.status_code == 200
+    assert "native_registration: archived" in (root / "garden" / MANIFEST_FILENAME).read_text()
