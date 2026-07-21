@@ -1,7 +1,7 @@
 # Native Hermes Projects & Mobile Operator Experience — Implementation Plan
 
 > **Status:** In progress.
-> **Progress:** 19 / 31 implementation tasks complete.
+> **Progress:** 20 / 31 implementation tasks complete.
 > **Tracking rule:** Update the task checkbox, evidence, and decision log immediately after each completed, verified slice. Do not mark a task complete based only on code written; record the command/test/device evidence.
 
 ## 1. Goal
@@ -256,7 +256,8 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
   **Evidence:** no mutation during dry-run test.
 - [ ] **P4.3** Implement explicit recovery apply requiring selected-plan confirmation/revalidation.  
   **Evidence:** confirm/cancel tests; changed manifest after plan generation is revalidated.
-- [ ] **P4.4** Recreate missing native Hermes Projects with stable slug, workspace primary folder, and present optional repo folder; never overwrite existing records.  
+- [x] **P4.4** Recreate missing native Hermes Projects with stable slug, workspace primary folder, and present optional repo folder; never overwrite existing records.
+
   **Evidence:** clean-profile restoration integration test.
 - [x] **P4.5** Add durable recovery audit events and per-project result reporting.
   **Evidence:** persistence/reload and API timeline tests.
@@ -320,6 +321,7 @@ Add entries here only after running the command against the current relevant rev
 | 2026-07-21 | P3.1–P3.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 105 passed | Managed repository lifecycle, clone failure repair, and repository attachment coverage. |
 | 2026-07-21 | P5.1 | `.venv/bin/python -m pytest services/control_api/tests -q` | 109 passed | Work-thread projection, read APIs, root/retry latest-outcome behavior, and SQLite reload lineage coverage. |
 | 2026-07-21 | P4.5 | `.venv/bin/python -m pytest services/control_api/tests/test_managed_workspace_api.py -q` | 13 passed | Append-only audit persistence/reload and authenticated per-slug timeline coverage. |
+| 2026-07-21 | P4.4 | `.venv/bin/python -m pytest -q services/control_api/tests` | 125 passed | Clean-profile restore preserves the manifest slug, makes the workspace primary, registers a present declared repository folder, and blocks an existing native record without replacement. |
 | 2026-07-21 | P5.4 | `.venv/bin/python -m pytest services/control_api/tests/test_native_project_integration.py services/control_api/tests/test_hermes_client.py -q` | 21 passed | Native session containment, stale-session rejection, and supported command continuation behavior. |
 
 ## 10. Decision log

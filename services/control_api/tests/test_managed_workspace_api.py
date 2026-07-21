@@ -305,6 +305,41 @@ def test_recovery_apply_revalidates_native_registration_before_creating(monkeypa
     assert project.name == "Externally Restored"
 
 
+def test_recovery_apply_restores_clean_profile_with_workspace_primary_and_declared_repo(monkeypatch, tmp_path):
+    client, root = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+
+    def clone(_adapter, _remote, destination):
+        destination.mkdir()
+
+    monkeypatch.setattr("services.control_api.managed_workspace.GitAdapter.clone", clone)
+    assert client.post(
+        "/projects",
+        headers=headers,
+        json={"name": "Restored Repository", "origin": "clone", "repository_url": "https://example.test/team/restored.git"},
+    ).status_code == 201
+    workspace = root / "restored-repository"
+    (workspace / "repo").rename(workspace / "source")
+    manifest_path = workspace / MANIFEST_FILENAME
+    manifest_path.write_text(manifest_path.read_text(encoding="utf-8").replace("path: repo", "path: source"), encoding="utf-8")
+    with sqlite3.connect(tmp_path / "hermes" / "projects.db") as db:
+        db.execute("DELETE FROM project_folders")
+        db.execute("DELETE FROM projects")
+
+    response = client.post(
+        "/recovery-plan/apply",
+        headers=headers,
+        json={"slugs": ["restored-repository"], "confirm": True},
+    )
+
+    assert response.json() == {"results": [{"slug": "restored-repository", "status": "restored"}]}
+    restored = HermesWorkspaceStore(tmp_path / "hermes").get_project("restored-repository")
+    assert restored is not None
+    assert restored.project_id == "restored-repository"
+    assert restored.primary_folder == str(workspace)
+    assert restored.folders == [str(workspace), str(workspace / "source")]
+
+
 def test_recovery_audit_store_persists_timeline_after_reload(tmp_path):
     database = tmp_path / "control-api.db"
     audit = RecoveryAuditStore(database)

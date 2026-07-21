@@ -51,6 +51,14 @@ class ManifestRepository(BaseModel):
     path: str = "repo"
     remote_url: str | None = None
 
+    @field_validator("path")
+    @classmethod
+    def relative_path(cls, value: str) -> str:
+        path = Path(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("manifest paths must be relative and contained")
+        return value
+
 
 class ManifestLifecycle(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -192,6 +200,16 @@ class ManagedWorkspaceStore:
             except (OSError, ValueError, ValidationError) as exc:
                 discovered.append((workspace, None, str(exc)))
         return discovered
+
+    @staticmethod
+    def repository_directory(workspace: Path, manifest: ProjectManifest) -> Path | None:
+        """Return a declared repository directory only when it stays in its workspace."""
+        if manifest.repository is None:
+            return None
+        repository = (workspace / manifest.repository.path).resolve()
+        if not repository.is_relative_to(workspace):
+            raise ValueError("repository path is outside the managed workspace")
+        return repository
 
     def attach_repository(self, project_id: str, repository_url: str) -> ProjectSummary:
 

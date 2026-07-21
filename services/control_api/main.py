@@ -312,8 +312,9 @@ def create_app() -> FastAPI:
                 continue
             workspace_path, manifest = entry
             folders = [str(workspace_path)]
-            if manifest.repository is not None and (workspace_path / "repo").is_dir():
-                folders.append(str(workspace_path / "repo"))
+            repository = managed_workspace.repository_directory(workspace_path, manifest)
+            if repository is not None and repository.is_dir():
+                folders.append(str(repository))
             try:
                 require_workspace().create_project(ProjectCreateRequest(name=manifest.identity.name, slug=slug, description=manifest.identity.description, folders=folders, primary_folder=str(workspace_path)))
                 results.append({"slug": slug, "status": "restored"})
@@ -353,7 +354,8 @@ def create_app() -> FastAPI:
                 continue
             assert manifest is not None
             registered = require_workspace().get_project(manifest.identity.slug)
-            if manifest.repository is not None and not (workspace_path / "repo").is_dir():
+            repository = managed_workspace.repository_directory(workspace_path, manifest)
+            if repository is not None and not repository.is_dir():
                 state = "missing_repository"
             elif registered and Path(registered.primary_folder or "").resolve() != workspace_path:
                 state = "conflict"
