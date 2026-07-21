@@ -122,3 +122,7 @@ def test_idempotency_key_returns_the_original_task(monkeypatch):
     assert first.status_code == 201
     assert second.status_code == 201
     assert second.json()["task_id"] == first.json()["task_id"]
+    assert second.json()["prompt"] == "first"
+    assert [task["task_id"] for task in client.get("/tasks", headers={"Authorization": "Bearer dev-token"}).json()] == [
+        first.json()["task_id"]
+    ]
