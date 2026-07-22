@@ -24,6 +24,7 @@ export default function NewTaskScreen() {
   const syncQueuedTasks = useDataStore((state) => state.syncQueuedTasks);
   const router = useRouter();
   const { projectId: projectParam } = useLocalSearchParams<{ projectId?: string }>();
+  const explicitProjectId = typeof projectParam === 'string' && projectParam.trim() ? projectParam : null;
   const insets = useSafeAreaInsets();
   const [prompt, setPrompt] = useState('');
   const [projectId, setProjectId] = useState('default');
@@ -45,11 +46,15 @@ export default function NewTaskScreen() {
       if (submitted.length > 0) setQueueNotice(`${submitted.length} queued task${submitted.length === 1 ? '' : 's'} submitted.`);
     });
   }, [apiToken, apiUrl, refreshData]);
-  useEffect(() => { if (projectId === 'default') void AsyncStorage.getItem('hmc.lastProject').then((value) => { if (value) setProjectId(value); }); }, [projectId]);
-
   useEffect(() => {
-    if (typeof projectParam === 'string' && projectParam.trim()) setProjectId(projectParam);
-  }, [projectParam]);
+    if (explicitProjectId) {
+      setProjectId(explicitProjectId);
+      return;
+    }
+    if (projectId === 'default') {
+      void AsyncStorage.getItem('hmc.lastProject').then((value) => { if (value) setProjectId(value); });
+    }
+  }, [explicitProjectId, projectId]);
 
   useEffect(() => {
     let mounted = true;
@@ -57,7 +62,7 @@ export default function NewTaskScreen() {
       .then((draft) => {
         if (!mounted || draft === null) return;
         setPrompt(draft.prompt);
-        setProjectId(draft.projectId);
+        setProjectId(explicitProjectId || draft.projectId);
         setPriority(draft.priority);
         setRequiresApproval(draft.requiresApproval);
       })
@@ -67,7 +72,7 @@ export default function NewTaskScreen() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [explicitProjectId]);
 
   useEffect(() => {
     if (!draftLoaded) return;
