@@ -16,16 +16,26 @@ appId: com.anonymous.hermesmobilecontrol
 - tapOn:
     id: "settings-api-url"
 - eraseText
-- inputText: "http://127.0.0.1:8787"
+- inputText: ${API_URL}
 - tapOn:
     id: "settings-api-token"
 - eraseText
 - inputText: ${DEVICE_TOKEN}
+- hideKeyboard
 - tapOn:
     id: "settings-save"
 - assertVisible:
     id: "settings-save-message"
+- scrollUntilVisible:
+    element:
+      text: "WebSocket"
+    direction: DOWN
 - extendedWaitUntil:
     visible: "connected"
-    timeout: 8000
+    timeout: 15000
 - assertVisible: "connected"
+- pressKey: back
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000

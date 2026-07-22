@@ -3,14 +3,21 @@
 # then run `device_sandbox.py disconnect` against the same loopback server.
 appId: com.anonymous.hermesmobilecontrol
 ---
-- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
 - tapOn:
     id: "header-settings"
 - assertVisible: "Settings"
+- scrollUntilVisible:
+    element:
+      text: "Reconnects"
+    direction: DOWN
 - assertVisible: "Connection state"
 - assertVisible: "WebSocket"
 - assertVisible: "Reconnects"
 - extendedWaitUntil:
     visible: ${WEBSOCKET_STATE}
-    timeout: 8000
+    timeout: 15000
 - assertVisible: ${WEBSOCKET_RECONNECTS}

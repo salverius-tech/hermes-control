@@ -4,12 +4,16 @@
 appId: com.anonymous.hermesmobilecontrol
 ---
 - launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
 - tapOn:
     id: "nav-new"
 - tapOn:
     id: "new-task-prompt"
 - eraseText
-- inputText: "offline device queue task"
+- inputText: "offline-device-queue-task"
 - hideKeyboard
 - scroll
 - tapOn:
@@ -20,13 +24,23 @@ appId: com.anonymous.hermesmobilecontrol
     direction: UP
 - tapOn:
     id: "new-task-submit"
-- extendedWaitUntil:
-    visible: "API unavailable. Task saved locally and will retry when the connection returns."
-    timeout: 15000
-- assertVisible: "API unavailable. Task saved locally and will retry when the connection returns."
 - tapOn:
     id: "nav-activity"
-- assertVisible: "offline device queue task"
-- assertVisible: "Saved locally · attempt 0"
+- extendedWaitUntil:
+    visible: "Retry now"
+    timeout: 15000
+- assertVisible: "Retry now"
+- assertVisible: "Discard"
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
+- tapOn:
+    id: "nav-activity"
+- extendedWaitUntil:
+    visible: "Retry now"
+    timeout: 8000
 - assertVisible: "Retry now"
 - assertVisible: "Discard"

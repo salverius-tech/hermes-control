@@ -9,6 +9,10 @@ appId: com.anonymous.hermesmobilecontrol
 ---
 - clearState
 - launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
 - tapOn:
     id: "header-settings"
 - assertVisible: "Settings"

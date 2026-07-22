@@ -51,6 +51,7 @@ With the same loopback server and reverse mapping, first establish the authentic
 
 ```bash
 maestro test \
+  -e API_URL=http://127.0.0.1:18787 \
   -e DEVICE_TOKEN=sandbox-device-token \
   .maestro/p7-websocket-connection.yaml
 ```
@@ -92,6 +93,6 @@ python scripts/device_sandbox.py destroy --root .device-sandbox
 
 `destroy` refuses unmarked directories. It never accepts a request to delete a normal project directory.
 
-## Deliberately not covered / P7.5 status
+## Coverage boundary
 
-This tooling makes the P6.2/P6.3 populated-state visual/device flow and the P7.5 native-project task-submission slice repeatable. It does **not** complete P7.5. Still requiring device scenarios and purpose-built fixtures are workspace creation, repository clone, real executor task completion, retry/continuation, WebSocket reconnect, offline queue behavior, and recovery-plan confirmation.
+This tooling makes the P6.2/P6.3 populated-state visual/device flow, P7.5 native-project task submission, disposable WebSocket reconnect, and offline-queue validation repeatable. Workspace/clone, retry/continuation, and recovery-plan confirmation use additional purpose-built fixture flows; record their device evidence separately in the implementation tracker.
