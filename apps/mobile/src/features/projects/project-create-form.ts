@@ -26,7 +26,16 @@ export const initialProjectCreateForm: ProjectCreateForm = {
 /** Matches the Control API's credential-free HTTPS/SSH remote requirement. */
 export function isRepositoryUrl(value: string): boolean {
   const remote = value.trim();
-  if (!remote || remote.startsWith('-') || !/^(https:\/\/|ssh:\/\/|git@)[^\s]+$/.test(remote)) return false;
+  if (!remote || remote.startsWith('-')) return false;
+  if (remote.startsWith('http://')) {
+    try {
+      const url = new URL(remote);
+      return url.hostname === '127.0.0.1' && Boolean(url.port) && Boolean(url.pathname.replaceAll('/', '')) && !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  }
+  if (!/^(https:\/\/|ssh:\/\/|git@)[^\s]+$/.test(remote)) return false;
   const host = remote.startsWith('git@') ? '' : remote.replace(/^[a-z]+:\/\//, '').split('/', 1)[0];
   return remote.startsWith('git@') || !host.includes('@');
 }

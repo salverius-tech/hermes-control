@@ -200,7 +200,13 @@ The response is a list of `TaskSummary` objects. Clients may persist local read 
 
 ### `GET /projects`
 
-Returns Hermes-native project summaries when `CONTROL_API_HERMES_HOME` is configured. Task-derived projects are retained as a fallback for development and tests.
+Returns Hermes-native project summaries from the configured Hermes profile. In production, missing native-project integration is a service-availability error; task-derived and `default` project IDs are never synthesized. The authoritative store and complete route-to-store mapping are in [Native-store and route mapping](NATIVE_STORE_ROUTE_MAPPING.md).
+
+#### Synthetic task-derived project-ID migration
+
+`CONTROL_API_ALLOW_SYNTHETIC_PROJECTS=1` is an explicitly development-only compatibility mode for isolated test fixtures. It must not be enabled in a deployed service. Clients that previously persisted task-derived project IDs must refresh `/projects`, discard a selection not returned by that response, require the operator to choose a returned non-archived native project, and submit that native `project_id`.
+
+There is no server-side automatic ID migration or fallback because it could execute work in an unintended project. In strict native mode, submitting a legacy `default` or task-derived ID returns `400` with `Unknown Hermes project: <id>`; a missing native project-store integration returns `503`. Preserve legacy attempts as history rather than relabelling them automatically.
 
 Auth: required.
 
@@ -210,7 +216,7 @@ Project selection is request context only. It does not call `hermes project use`
 
 ### `GET /projects/{project_id}`
 
-Returns one Hermes-native project, including its primary folder and folder membership.
+Returns one Hermes-native project, including its primary folder and folder membership. Unknown or legacy synthetic IDs return an error and are not materialized as projects.
 
 ### `GET /projects/{project_id}/metrics`
 

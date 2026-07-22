@@ -8,6 +8,7 @@ import { readCache, writeCache } from '@/api/cache';
 import { apiFetch, TaskEvent, TaskSummary, WorkThreadSummary } from '@/api/client';
 import { ExpandableDetails } from '@/components/ExpandableDetails';
 import { approvalDecisionLabel, latestApprovalAudit } from '@/features/tasks/approval-audit';
+import { attemptTimeline } from '@/features/tasks/task-detail-state';
 import { MetricCard } from '@/components/MetricCard';
 import { MetadataRow } from '@/components/MetadataRow';
 import { bottomNavigationHeight } from '@/navigation/constants';
@@ -255,6 +256,12 @@ export default function TaskDetailScreen() {
             <MetadataRow label="Session" value={task.session_id} />
           </ExpandableDetails>
 
+          {thread ? <ExpandableDetails initiallyExpanded label={`Attempt timeline · ${thread.attempts.length}`}>
+            {attemptTimeline(thread, task.task_id).map(({ task: attempt, label, isCurrent }) => <Pressable accessibilityRole="link" key={attempt.task_id} onPress={() => router.replace(`/tasks/${attempt.task_id}`)} style={[styles.attemptRow, isCurrent && styles.currentAttempt]} testID={`task-attempt-${attempt.task_id}`}>
+              <View><Text style={styles.attemptLabel}>{label}{isCurrent ? ' · Viewing' : ''}</Text><Text style={styles.muted}>{attempt.title}</Text></View><StatusPill status={attempt.status} />
+            </Pressable>)}
+          </ExpandableDetails> : null}
+
           {editingRetry ? (
             <MetricCard title={continuationMode ? 'Continue Hermes session' : 'Edit before retry'} subtitle="The original task remains unchanged; this creates a linked task.">
               <TextInput accessibilityLabel="Retry guidance" accessibilityHint="Add guidance or revise the instruction" multiline onChangeText={setGuidance} placeholder="Add guidance or revise the instruction..." placeholderTextColor={colors.muted} style={styles.guidanceInput} value={guidance} />
@@ -288,6 +295,8 @@ export default function TaskDetailScreen() {
 const styles = StyleSheet.create({
   approvalAudit: { borderTopColor: colors.border, borderTopWidth: 1, gap: spacing.xs, marginTop: spacing.md, paddingTop: spacing.md },
   approvalHeading: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  attemptLabel: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  attemptRow: { alignItems: 'center', borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -322,6 +331,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
   },
+  currentAttempt: { backgroundColor: colors.primarySoft, borderRadius: 10, paddingHorizontal: spacing.sm },
   disabledButton: {
     opacity: 0.6,
   },

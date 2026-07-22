@@ -12,7 +12,7 @@ const ATTENTION_KEY = 'hmc.attention.seen.v1';
 export const isAttentionTask = (task: TaskSummary) => ['awaiting_approval', 'blocked', 'failed'].includes(task.status);
 
 function attentionItems(tasks: TaskSummary[]) { return tasks.filter(isAttentionTask); }
-function mergeTask(tasks: TaskSummary[], next: TaskSummary) {
+export function mergeTask(tasks: TaskSummary[], next: TaskSummary) {
   const current = tasks.find((task) => task.task_id === next.task_id);
   if (current && Date.parse(current.updated_at) > Date.parse(next.updated_at)) return tasks;
   return [next, ...tasks.filter((task) => task.task_id !== next.task_id)];
@@ -84,12 +84,15 @@ export const useDataStore = create<DataState>((set, get) => ({
       socket.onmessage = (message) => {
         const event = parseLiveEvent(typeof message.data === 'string' ? message.data : ''); if (!event) return;
         if (event.type === 'snapshot') {
+          const lastEventSequence = get().lastEventSequence;
+          if (lastEventSequence !== null && event.seq <= lastEventSequence) return;
           const attention = attentionItems(event.tasks);
           set({ tasks: event.tasks, projects: event.projects, agents: event.agents, attention, stale: false, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: false });
           void unreadCount(event.tasks).then((unreadAttention) => set({ unreadAttention }));
           reconcile();
         } else {
           const lastEventSequence = get().lastEventSequence;
+          if (lastEventSequence !== null && event.seq <= lastEventSequence) return;
           const expected = lastEventSequence === null ? event.seq : lastEventSequence + 1;
           const gap = event.seq !== expected;
           set((state) => { const tasks = mergeTask(state.tasks, event.task); return { tasks, attention: attentionItems(tasks), stale: gap, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: gap }; });

@@ -2,12 +2,13 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/theme/tokens';
 
-export type StatusKind = 'awaiting_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled' | 'rejected' | 'blocked' | 'idle' | 'busy' | 'offline' | 'already_registered' | 'ready' | 'missing_repository' | 'conflict';
+export type StatusKind = 'awaiting_approval' | 'queued' | 'running' | 'attention_required' | 'completed' | 'failed' | 'canceled' | 'rejected' | 'blocked' | 'idle' | 'busy' | 'offline' | 'already_registered' | 'ready' | 'missing_repository' | 'conflict';
 
 const statusColor: Record<StatusKind, string> = {
   awaiting_approval: colors.warning,
   queued: colors.warning,
   running: colors.primary,
+  attention_required: colors.warning,
   completed: colors.success,
   failed: colors.danger,
   canceled: colors.muted,

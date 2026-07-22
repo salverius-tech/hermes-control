@@ -1,0 +1,31 @@
+# Establish the physical-device WebSocket baseline for disposable loopback validation.
+appId: com.anonymous.hermesmobilecontrol
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
+- tapOn:
+    id: "header-settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-api-url"
+    timeout: 5000
+- tapOn:
+    id: "settings-api-url"
+- eraseText
+- inputText: "http://127.0.0.1:8787"
+- tapOn:
+    id: "settings-api-token"
+- eraseText
+- inputText: ${DEVICE_TOKEN}
+- tapOn:
+    id: "settings-save"
+- assertVisible:
+    id: "settings-save-message"
+- extendedWaitUntil:
+    visible: "connected"
+    timeout: 8000
+- assertVisible: "connected"

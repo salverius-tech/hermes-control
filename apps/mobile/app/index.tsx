@@ -30,19 +30,19 @@ export default function DashboardScreen() {
       {!lastSync && !offline ? <ActivityIndicator color={colors.primary} /> : null}
 
 
-      <View style={styles.section}><SectionHeader actionHref="/attention" actionLabel="View all" count={attentionRequired.length} title="Needs attention" />
-        {attentionRequired.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} thread={thread} />)}
-        {(!lastSync && !offline) ? null : attentionRequired.length === 0 ? <EmptyState body="Approvals, blockers, and failures will appear here." title="All clear" /> : null}
+      <View style={styles.section} testID="inbox-section-attention"><SectionHeader actionHref="/attention" actionLabel="View all" count={attentionRequired.length} title="Needs attention" />
+        {attentionRequired.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} section="attention" thread={thread} />)}
+        {(!lastSync && !offline) ? null : attentionRequired.length === 0 ? <View testID="inbox-empty-attention"><EmptyState body="Approvals, blockers, and failures will appear here." title="All clear" /></View> : null}
       </View>
 
-      <View style={styles.section}><SectionHeader actionHref="/tasks" actionLabel="View all" count={active.length} title="Active work" />
-        {active.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} thread={thread} />)}
-        {(!lastSync && !offline) ? null : active.length === 0 ? <EmptyState body="Start a task from a project when you are ready." title="Nothing running" /> : null}
+      <View style={styles.section} testID="inbox-section-active"><SectionHeader actionHref="/tasks" actionLabel="View all" count={active.length} title="Active work" />
+        {active.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} section="active" thread={thread} />)}
+        {(!lastSync && !offline) ? null : active.length === 0 ? <View testID="inbox-empty-active"><EmptyState body="Start a task from a project when you are ready." title="Nothing running" /></View> : null}
       </View>
 
-      <View style={styles.section}><SectionHeader actionHref="/tasks" actionLabel="View all" count={recentlyResolved.length} title="Recent work" />
-        {recentlyResolved.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} thread={thread} />)}
-        {(!lastSync && !offline) ? null : recentlyResolved.length === 0 ? <EmptyState body="Resolved work will appear here after it finishes." title="No recent work" /> : null}
+      <View style={styles.section} testID="inbox-section-recent"><SectionHeader actionHref="/tasks" actionLabel="View all" count={recentlyResolved.length} title="Recent work" />
+        {recentlyResolved.slice(0, 3).map((thread) => <WorkThreadRow key={thread.root_task_id} section="recent" thread={thread} />)}
+        {(!lastSync && !offline) ? null : recentlyResolved.length === 0 ? <View testID="inbox-empty-recent"><EmptyState body="Resolved work will appear here after it finishes." title="No recent work" /></View> : null}
       </View>
 
       <View style={styles.section}><SectionHeader actionHref="/projects" actionLabel="View all" count={projects.length} title="Projects" />
@@ -53,10 +53,10 @@ export default function DashboardScreen() {
   );
 }
 
-function WorkThreadRow({ thread }: { thread: WorkThreadSummary }) {
+function WorkThreadRow({ thread, section }: { thread: WorkThreadSummary; section: 'attention' | 'active' | 'recent' }) {
   const latest = thread.latest_attempt;
   const attemptCount = thread.attempts.length;
-  return <Link href={`/tasks/${latest.task_id}`} asChild><Pressable style={({ pressed }) => [styles.task, pressed && styles.pressed]}><View style={styles.taskTop}><Text numberOfLines={2} style={styles.taskTitle}>{latest.title}</Text><StatusPill status={latest.status} /></View><Text numberOfLines={1} style={styles.muted}>{thread.project_id} · {attemptCount} immutable attempt{attemptCount === 1 ? '' : 's'}</Text></Pressable></Link>;
+  return <Link href={`/tasks/${latest.task_id}`} asChild><Pressable style={({ pressed }) => [styles.task, pressed && styles.pressed]} testID={`inbox-thread-${section}-${thread.root_task_id}`}><View style={styles.taskTop}><Text numberOfLines={2} style={styles.taskTitle}>{latest.title}</Text><StatusPill status={latest.status} /></View><Text numberOfLines={1} style={styles.muted}>{thread.project_id} · {attemptCount} immutable attempt{attemptCount === 1 ? '' : 's'}</Text></Pressable></Link>;
 }
 
 const styles = StyleSheet.create({

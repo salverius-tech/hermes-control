@@ -11,6 +11,10 @@ export default function MoreScreen() {
 
   return <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
     <Text style={styles.intro}>Connection settings and safe operational review tools.</Text>
+    <Link href="/settings" asChild><Pressable accessibilityRole="button" style={({ pressed }) => [styles.card, pressed && styles.pressed]} testID="more-diagnostics">
+      <View style={styles.copy}><Text style={styles.title}>Diagnostics</Text><Text style={styles.body}>Review authenticated native project, workspace, bridge, and executor readiness.</Text></View>
+      <Feather color={colors.muted} name="chevron-right" size={24} />
+    </Pressable></Link>
     <Link href="/recovery-plan" asChild><Pressable accessibilityRole="button" style={({ pressed }) => [styles.card, pressed && styles.pressed]} testID="more-recovery-plan">
       <View style={styles.copy}><Text style={styles.title}>Recovery plan</Text><Text style={styles.body}>Review managed workspaces and their recovery readiness. This view does not make changes.</Text></View>
       <Feather color={colors.muted} name="chevron-right" size={24} />

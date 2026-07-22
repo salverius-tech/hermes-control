@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createProject, fetchRecoveryPlan, fetchWorkThreads, testConnection } from './client';
+import { apiFetch, applyRecoveryPlan, createProject, fetchRecoveryPlan, fetchWorkThreads, testConnection } from './client';
 
 const workThread = {
   attempts: [],
@@ -32,6 +32,21 @@ describe('fetchWorkThreads', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchWorkThreads('http://localhost:8787', 'test-token', { includeArchived: true, projectId: 'ops team' })).resolves.toEqual([workThread]);
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe('apiFetch', () => {
+  it('rejects a request that remains unreachable so offline submission can queue promptly', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+
+    const request = apiFetch('http://127.0.0.1:8787', 'test-token', '/tasks', { method: 'POST' });
+    const expectation = expect(request).rejects.toThrow('API request timed out');
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await expectation;
+    vi.useRealTimers();
   });
 });
 
@@ -46,6 +61,24 @@ describe('fetchRecoveryPlan', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchRecoveryPlan('http://localhost:8787', 'test-token')).resolves.toEqual(plan);
+  });
+});
+
+describe('applyRecoveryPlan', () => {
+  it('requires the server-side explicit confirmation contract for reviewed slugs', async () => {
+    const result = { results: [{ slug: 'garden', status: 'restored' }] };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('http://localhost:8787/recovery-plan/apply');
+      expect(init).toMatchObject({
+        body: JSON.stringify({ slugs: ['garden'], confirm: true }),
+        headers: { Authorization: 'Bearer test-token' },
+        method: 'POST',
+      });
+      return new Response(JSON.stringify(result), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(applyRecoveryPlan('http://localhost:8787', 'test-token', ['garden'])).resolves.toEqual(result);
   });
 });
 

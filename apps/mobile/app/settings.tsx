@@ -7,6 +7,7 @@ import { ExpandableDetails } from '@/components/ExpandableDetails';
 import { ActionButton } from '@/components/ActionButton';
 import { MetadataRow } from '@/components/MetadataRow';
 import { MetricCard } from '@/components/MetricCard';
+import { diagnosticReadiness } from '@/features/operations/diagnostics-state';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useDataStore } from '@/state/data-store';
 import { useSettingsStore } from '@/state/settings';
@@ -62,7 +63,7 @@ export default function SettingsScreen() {
 
     <ExpandableDetails label="Diagnostics">
       <ActionButton disabled={!draftToken.trim()} label="Load diagnostics" onPress={loadDiagnostics} testID="settings-load-diagnostics" />
-      {diagnostics ? <><MetadataRow label="API" value={diagnostics.version} /><MetadataRow label="Storage" value={diagnostics.storage} /><MetadataRow label="Schema" value={diagnostics.schema_version} /><MetadataRow label="Execution" value={diagnostics.execution_mode} /><MetadataRow label="Events" value={diagnostics.websocket_path} /></> : <Text style={styles.help}>Load authenticated diagnostics when you need backend details.</Text>}
+      {diagnostics ? <><MetadataRow label="API" value={diagnostics.version} /><MetadataRow label="Storage" value={diagnostics.storage} /><MetadataRow label="Schema" value={diagnostics.schema_version} /><MetadataRow label="Execution" value={diagnostics.execution_mode} /><MetadataRow label="Events" value={diagnostics.websocket_path} />{diagnosticReadiness(diagnostics).map(([label, value]) => <MetadataRow key={label} label={label} value={value} />)}</> : <Text style={styles.help}>Load authenticated diagnostics when you need backend details.</Text>}
     </ExpandableDetails>
     <Text style={styles.help}>Use a PC LAN IP or Tailscale host when testing from a physical Android device.</Text>
   </ScrollView>;

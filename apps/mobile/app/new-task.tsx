@@ -205,6 +205,7 @@ export default function NewTaskScreen() {
           (!prompt.trim() || submitting || !apiToken || !projects.some((project) => project.project_id === projectId && !project.archived)) && styles.buttonDisabled,
           pressed && styles.buttonPressed,
         ]}
+        testID="new-task-submit"
       >
         <Text style={styles.buttonText}>{submitting ? 'Submitting…' : 'Start Hermes task'}</Text>
       </Pressable>
@@ -230,7 +231,7 @@ export default function NewTaskScreen() {
         <Text style={styles.label}>Project</Text>
         <Text style={styles.selectedProject}>{projects.find((project) => project.project_id === projectId)?.name || projectId}</Text>
         <Text style={styles.help}>{projects.find((project) => project.project_id === projectId)?.primary_folder || 'Select an active Hermes project.'}</Text>
-        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable accessibilityRole="button" accessibilityState={{ selected: project.project_id === projectId }} key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
+        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable accessibilityRole="button" accessibilityState={{ selected: project.project_id === projectId }} key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]} testID={`new-task-project-${project.project_id}`}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
         {projects.length > 0 && projects.every((project) => project.archived) ? <Text style={styles.error}>All projects are archived. Restore one before creating work.</Text> : null}
       </View>
 

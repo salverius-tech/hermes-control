@@ -109,6 +109,12 @@ export type Diagnostics = {
   websocket_path: string;
   hermes_home?: string;
   hermes_home_available?: boolean | string;
+  native_projects_configured?: boolean | string;
+  managed_workspace_ready?: boolean | string;
+  bridge_configured?: boolean | string;
+  bridge_socket_available?: boolean | string;
+  executor_ready?: boolean | string;
+  active_task_count?: number | string;
 };
 
 export type RecoveryPlanStatus = 'already_registered' | 'ready' | 'missing_repository' | 'conflict' | 'blocked';
@@ -124,16 +130,40 @@ export type RecoveryPlan = {
   entries: RecoveryPlanEntry[];
 };
 
+export type RecoveryApplyResult = {
+  slug: string;
+  status: 'restored' | 'blocked';
+};
+
+export type RecoveryApplyResponse = {
+  results: RecoveryApplyResult[];
+};
+
 export async function apiFetch<T>(apiUrl: string, apiToken: string, path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(buildApiUrl(apiUrl, path), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let response: Response;
+  try {
+    const request = fetch(buildApiUrl(apiUrl, path), {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+        ...(init.headers || {}),
+      },
+      signal: controller.signal,
+    });
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new Error('API request timed out'));
+      }, 10_000);
+    });
+    response = await Promise.race([request, deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const body = await response.text();
@@ -168,6 +198,14 @@ export async function fetchWorkThreads(
 
 export async function fetchRecoveryPlan(apiUrl: string, apiToken: string): Promise<RecoveryPlan> {
   return apiFetch<RecoveryPlan>(apiUrl, apiToken, '/recovery-plan');
+}
+
+/** Applies only slugs selected from a freshly loaded read-only recovery plan. */
+export async function applyRecoveryPlan(apiUrl: string, apiToken: string, slugs: string[]): Promise<RecoveryApplyResponse> {
+  return apiFetch<RecoveryApplyResponse>(apiUrl, apiToken, '/recovery-plan/apply', {
+    method: 'POST',
+    body: JSON.stringify({ slugs, confirm: true }),
+  });
 }
 
 export async function testConnection(apiUrl: string, apiToken: string): Promise<boolean> {

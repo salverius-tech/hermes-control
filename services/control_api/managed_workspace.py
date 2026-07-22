@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -289,6 +290,24 @@ class ManagedWorkspaceStore:
         if not value or not value.strip() or value.startswith("-"):
             raise ValueError("repository URL is required")
         remote = value.strip()
+        if remote.startswith("http://"):
+            # Plain HTTP is never accepted for normal remotes. The sole exception
+            # keeps physical-device fixtures local: a non-default port on the
+            # literal IPv4 loopback address cannot leave this host.
+            parsed = urlsplit(remote)
+            try:
+                is_loopback_fixture = (
+                    parsed.hostname == "127.0.0.1"
+                    and parsed.port is not None
+                    and bool(parsed.path.strip("/"))
+                    and parsed.username is None
+                    and parsed.password is None
+                )
+            except ValueError:
+                is_loopback_fixture = False
+            if not is_loopback_fixture:
+                raise ValueError("repository URL must use HTTPS or SSH")
+            return remote
         if not re.match(r"^(https://|ssh://|git@)[^\s]+$", remote):
             raise ValueError("repository URL must use HTTPS or SSH")
         host = remote.split("://", 1)[-1].split("/", 1)[0]

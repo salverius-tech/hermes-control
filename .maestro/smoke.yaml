@@ -6,11 +6,12 @@ appId: com.anonymous.hermesmobilecontrol
 - assertVisible: "Work inbox"
 - assertVisible: "Needs attention"
 - assertVisible: "Active work"
-- assertVisible: "Hermes agent"
-- assertVisible: "Home"
-- assertVisible: "Attention"
+- assertVisible: "Recent work"
+- assertVisible: "Inbox"
 - assertVisible: "New"
 - assertVisible: "Projects"
+- assertVisible: "Activity"
+- assertVisible: "More"
 - assertNotVisible: "Start new task"
 - assertNotVisible: "View tasks"
 - assertNotVisible: "Configure API"
@@ -20,15 +21,16 @@ appId: com.anonymous.hermesmobilecontrol
 - assertVisible: "Instruction"
 - assertVisible: "Speak prompt"
 - tapOn:
-    id: "nav-attention"
-- assertVisible: "Needs attention"
-- assertVisible: "Open items"
+    id: "nav-activity"
+- assertVisible: "Tasks"
+- assertVisible:
+    id: "activity-search"
 - tapOn:
     id: "nav-projects"
 - assertVisible: "Projects"
 - assertVisible: "Workspaces"
 - tapOn:
-    id: "nav-home"
+    id: "nav-inbox"
 - assertVisible: "Hermes Control"
 - assertVisible: "Work inbox"
 - tapOn:

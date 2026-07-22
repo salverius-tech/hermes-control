@@ -1,0 +1,16 @@
+# Disposable local-sandbox physical-device task-detail review.
+# Run after p7-device-task.yaml has saved fixture-only settings.
+appId: com.anonymous.hermesmobilecontrol
+---
+- launchApp
+- tapOn:
+    id: "inbox-thread-attention-${P6_ATTENTION_ROOT}"
+- assertVisible: "Task detail"
+- assertVisible:
+    id: "task-attempt-${P6_ATTENTION_ROOT}"
+- assertVisible:
+    id: "task-retry"
+- assertVisible:
+    id: "task-edit-retry"
+- assertVisible:
+    id: "task-continue"

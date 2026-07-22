@@ -636,6 +636,10 @@ def create_app() -> FastAPI:
     async def resume_persisted_tasks() -> None:
         # The API worker is restartable. Reuse the stable task ID as the bridge
         # request ID so running work reattaches/replays instead of duplicating.
+        # Disposable device fixtures disable this explicitly so their seeded
+        # queued/running presentation states are not executed by a test server.
+        if os.getenv("CONTROL_API_RESUME_TASKS_ON_STARTUP", "1") != "1":
+            return
         for task in task_service.resume_after_restart():
             task_service.start_task(
                 task,

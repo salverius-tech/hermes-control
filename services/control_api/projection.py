@@ -79,10 +79,36 @@ class TaskProjection:
                 groups[task.root_task_id or task.task_id].append(task)
         threads = []
         for root, attempts in groups.items():
-            attempts.sort(key=lambda task: (task.created_at, task.task_id))
-            latest = attempts[-1]
-            threads.append(WorkThreadSummary(root_task_id=root, project_id=latest.project_id, attempts=attempts, latest_attempt=latest, latest_outcome=TaskStatus(latest.status)))
+            ordered_attempts = self._order_work_thread_attempts(root, attempts)
+            latest = max(enumerate(ordered_attempts), key=lambda item: (item[1].created_at, item[0]))[1]
+            threads.append(WorkThreadSummary(root_task_id=root, project_id=latest.project_id, attempts=ordered_attempts, latest_attempt=latest, latest_outcome=TaskStatus(latest.status)))
         return sorted(threads, key=lambda thread: thread.latest_attempt.created_at, reverse=True)
+
+    @staticmethod
+    def _order_work_thread_attempts(root_task_id: str, attempts: list[TaskSummary]) -> list[TaskSummary]:
+        """Keep immutable attempts chronological without using random task IDs as tie-breakers."""
+        task_ids = {task.task_id for task in attempts}
+        children: dict[str, list[TaskSummary]] = defaultdict(list)
+        roots: list[TaskSummary] = []
+        for task in attempts:
+            if task.task_id == root_task_id or task.parent_task_id not in task_ids:
+                roots.append(task)
+            else:
+                children[task.parent_task_id].append(task)
+
+        def sort_key(task: TaskSummary) -> datetime:
+            return task.created_at
+
+        ordered: list[TaskSummary] = []
+
+        def append_attempt_and_descendants(task: TaskSummary) -> None:
+            ordered.append(task)
+            for child in sorted(children[task.task_id], key=sort_key):
+                append_attempt_and_descendants(child)
+
+        for attempt in sorted(roots, key=sort_key):
+            append_attempt_and_descendants(attempt)
+        return ordered
 
     def get_task(self, task_id: str) -> TaskSummary | None:
         return self._tasks.get(task_id)

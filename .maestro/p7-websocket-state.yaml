@@ -1,0 +1,11 @@
+# Assert the current real socket state after fixture lifecycle actions.
+# Start this flow only after p7-device-task.yaml saved fixture settings.
+appId: com.anonymous.hermesmobilecontrol
+---
+- launchApp
+- tapOn:
+    id: "header-settings"
+- assertVisible: "Settings"
+- assertVisible: "Connection state"
+- assertVisible: "WebSocket"
+- assertVisible: ${WEBSOCKET_STATE}

@@ -45,7 +45,7 @@ export default function TasksScreen() {
     <ScrollView refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={() => void loadTasks(true)} refreshing={refreshing} />} contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}>
       <Text style={styles.heading}>Tasks</Text>
       <Text style={styles.muted}>Inbox shows work that needs attention or is still active.</Text>
-      <TextInput accessibilityLabel="Search activity" onChangeText={setQuery} placeholder="Search activity, history, or projects" placeholderTextColor={colors.muted} style={styles.search} value={query} />
+      <TextInput accessibilityLabel="Search activity" onChangeText={setQuery} placeholder="Search activity, history, or projects" placeholderTextColor={colors.muted} style={styles.search} testID="activity-search" value={query} />
       <ScrollView contentContainerStyle={styles.filters} horizontal showsHorizontalScrollIndicator={false}>
         {taskFilters.map((item) => <Pressable accessibilityRole="button" accessibilityState={{ selected: filter === item.value }} key={item.value} onPress={() => setFilter(item.value)} style={[styles.filter, filter === item.value && styles.filterSelected]}><Text style={[styles.filterText, filter === item.value && styles.filterTextSelected]}>{item.label}</Text></Pressable>)}
       </ScrollView>
@@ -53,12 +53,12 @@ export default function TasksScreen() {
       {!apiToken ? <Text style={styles.muted}>Configure your API token in Settings.</Text> : null}
       {offline ? <Text style={styles.muted}>Showing cached tasks while the API is unavailable.</Text> : null}
       {queuedTasks.map((item) => (
-        <View key={item.local_id} style={styles.queuedCard}>
+        <View key={item.local_id} style={styles.queuedCard} testID={`queued-task-${item.local_id}`}>
           <View style={styles.cardTop}><Text style={styles.title} numberOfLines={2}>{item.request.prompt}</Text><Text style={styles.queueStatus}>{item.state}</Text></View>
           <Text style={styles.meta}>Saved locally · attempt {item.attempts}</Text>
           <View style={styles.queueActions}>
-            <Pressable onPress={() => void retryQueuedTask(AsyncStorage, item.local_id).then(refresh)} style={styles.queueButton}><Text style={styles.queueButtonText}>Retry now</Text></Pressable>
-            <Pressable onPress={() => void removeQueuedTask(AsyncStorage, item.local_id).then(refresh)} style={styles.queueCancel}><Text style={styles.queueButtonText}>Discard</Text></Pressable>
+            <Pressable onPress={() => void retryQueuedTask(AsyncStorage, item.local_id).then(refresh)} style={styles.queueButton} testID={`queued-task-retry-${item.local_id}`}><Text style={styles.queueButtonText}>Retry now</Text></Pressable>
+            <Pressable onPress={() => void removeQueuedTask(AsyncStorage, item.local_id).then(refresh)} style={styles.queueCancel} testID={`queued-task-discard-${item.local_id}`}><Text style={styles.queueButtonText}>Discard</Text></Pressable>
           </View>
         </View>
       ))}

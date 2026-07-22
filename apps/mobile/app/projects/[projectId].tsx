@@ -55,46 +55,49 @@ export default function ProjectDetailScreen() {
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {project ? (
-        <>
-          <View style={styles.header}>
+        <View testID={`project-detail-${project.project_id}`}>
+          <View style={styles.header} testID="project-detail-header">
             <View><Text style={styles.title}>{project.name}</Text><Text style={styles.id}>{project.project_id}</Text></View>
-            <Link href={{ pathname: '/projects/manage', params: { projectId: project.project_id } }} asChild><Pressable><Text style={styles.link}>Manage</Text></Pressable></Link>
             {project.description ? <Text style={styles.muted}>{project.description}</Text> : null}
-            <View style={styles.workspaceState}>
-              <Text style={styles.workspaceLabel}>Workspace primary folder</Text>
-              <Text selectable style={styles.folder}>{folders?.primaryFolder || 'No primary folder registered'}</Text>
-              <Text style={styles.workspaceLabel}>Repository folder</Text>
-              <Text selectable style={styles.folder}>{folders?.repositoryFolder || 'Workspace-only — no repository folder registered'}</Text>
-            </View>
           </View>
           <Link href={{ pathname: '/new-task', params: { projectId: project.project_id } }} asChild>
             <Pressable style={styles.primaryButton}><Text style={styles.primaryButtonText}>Start task in this project</Text></Pressable>
           </Link>
-          <Section attention title="Needs attention" count={threadState.attentionRequired.length}>
+          <Section attention testID="project-section-attention" title="Needs attention" count={threadState.attentionRequired.length}>
             {threadState.attentionRequired.map((thread) => <ThreadCard key={thread.root_task_id} thread={thread} />)}
             {!threadState.attentionRequired.length ? <Text style={styles.muted}>No work threads need review.</Text> : null}
           </Section>
-          <Section title="Active work" count={threadState.active.length}>
+          <Section testID="project-section-active" title="Active work" count={threadState.active.length}>
             {threadState.active.map((thread) => <ThreadCard key={thread.root_task_id} thread={thread} />)}
             {!threadState.active.length ? <Text style={styles.muted}>No work is currently running or queued.</Text> : null}
           </Section>
-          <Section title="Recent work threads" count={threadState.recentlyResolved.length}>
+          <Section testID="project-section-recent" title="Recent work threads" count={threadState.recentlyResolved.length}>
             {threadState.recentlyResolved.map((thread) => <ThreadCard key={thread.root_task_id} thread={thread} />)}
             {!threadState.recentlyResolved.length ? <Text style={styles.muted}>No completed work threads in this project.</Text> : null}
           </Section>
-          {sessions.length ? <Section title="Hermes sessions" count={sessions.length}>
+          <Section testID="project-section-sessions" title="Hermes sessions" count={sessions.length}>
             {sessions.slice(0, 5).map((session) => (
-              <View key={session.session_id} style={styles.session}><Text style={styles.sessionTitle}>{session.title || 'Untitled session'}</Text><Text style={styles.muted} numberOfLines={1}>{session.preview || 'No session preview available'}</Text></View>
+              <View key={session.session_id} style={styles.session} testID={`project-session-${session.session_id}`}><Text style={styles.sessionTitle}>{session.title || 'Untitled session'}</Text><Text style={styles.muted} numberOfLines={1}>{session.preview || 'No session preview available'}</Text></View>
             ))}
-          </Section> : null}
-        </>
+            {!sessions.length ? <Text style={styles.muted}>No Hermes sessions for this project.</Text> : null}
+          </Section>
+          <Section testID="project-section-workspace" title="Workspace & repository">
+            <View style={styles.workspaceState}>
+              <Text style={styles.workspaceLabel}>Workspace primary folder</Text>
+              <Text selectable style={styles.folder} testID="project-workspace-primary-folder">{folders?.primaryFolder || 'No primary folder registered'}</Text>
+              <Text style={styles.workspaceLabel}>Repository folder</Text>
+              <Text selectable style={styles.folder} testID="project-workspace-repository-folder">{folders?.repositoryFolder || 'Workspace-only — no repository folder registered'}</Text>
+              <Link href={{ pathname: '/projects/manage', params: { projectId: project.project_id } }} asChild><Pressable testID="project-manage"><Text style={styles.link}>Manage workspace & repository</Text></Pressable></Link>
+            </View>
+          </Section>
+        </View>
       ) : null}
     </ScrollView>
   );
 }
 
-function Section({ title, count, attention, children }: { title: string; count: number; attention?: boolean; children: React.ReactNode }) {
-  return <View style={styles.section}><View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{title}</Text><Text style={[styles.count, attention && styles.attention]}>{count}</Text></View>{children}</View>;
+function Section({ title, count, attention, children, testID }: { title: string; count?: number; attention?: boolean; children: React.ReactNode; testID: string }) {
+  return <View style={styles.section} testID={testID}><View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{title}</Text>{count === undefined ? null : <Text style={[styles.count, attention && styles.attention]}>{count}</Text>}</View>{children}</View>;
 }
 
 function TaskRow({ task }: { task: TaskSummary }) {
@@ -107,7 +110,7 @@ function ThreadCard({ thread }: { thread: WorkThreadSummary }) {
   const needsAttention = ['awaiting_approval', 'attention_required', 'blocked', 'failed'].includes(latest.status);
   const [expanded, setExpanded] = useState(needsAttention);
   useEffect(() => { if (needsAttention) setExpanded(true); }, [needsAttention]);
-  return <View style={styles.thread}><Pressable accessibilityRole="button" onPress={() => setExpanded((value) => !value)}><View style={styles.taskTop}><Text style={styles.taskTitle} numberOfLines={2}>{latest.title}</Text><StatusPill status={latest.status} /></View><Text style={styles.taskMeta}>{tasks.length} immutable attempt{tasks.length === 1 ? '' : 's'} · {expanded ? 'Collapse' : 'Expand'}</Text><Text style={styles.taskMeta}>{latest.result_summary || latest.error || latest.blocker_message || 'No final result yet'}</Text></Pressable>{expanded ? tasks.slice().sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((task) => <TaskRow key={task.task_id} task={task} />) : null}</View>;
+  return <View style={styles.thread} testID={`project-thread-${thread.root_task_id}`}><Pressable accessibilityRole="button" onPress={() => setExpanded((value) => !value)}><View style={styles.taskTop}><Text style={styles.taskTitle} numberOfLines={2}>{latest.title}</Text><StatusPill status={latest.status} /></View><Text style={styles.taskMeta}>{tasks.length} immutable attempt{tasks.length === 1 ? '' : 's'} · {expanded ? 'Collapse' : 'Expand'}</Text><Text style={styles.taskMeta}>{latest.result_summary || latest.error || latest.blocker_message || 'No final result yet'}</Text></Pressable>{expanded ? tasks.slice().sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((task) => <TaskRow key={task.task_id} task={task} />) : null}</View>;
 }
 
 const styles = StyleSheet.create({

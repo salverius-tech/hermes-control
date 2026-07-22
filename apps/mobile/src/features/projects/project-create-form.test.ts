@@ -23,7 +23,7 @@ describe('validateProjectCreateForm', () => {
     expect(validateProjectCreateForm(form({ origin: 'adopt', folder: '  ' }))).toEqual({
       errors: { folder: 'Choose or enter the existing project folder to adopt.' },
     });
-    expect(validateProjectCreateForm(form({ origin: 'adopt' }).request).toEqual({
+    expect(validateProjectCreateForm(form({ origin: 'adopt' })).request).toEqual({
       description: 'A focused project.',
       folders: ['/approved/existing-project'],
       name: 'Garden Planner',
@@ -35,7 +35,7 @@ describe('validateProjectCreateForm', () => {
     expect(validateProjectCreateForm(form({ origin: 'clone', repositoryUrl: '' }))).toEqual({
       errors: { repositoryUrl: 'Repository URL is required.' },
     });
-    expect(validateProjectCreateForm(form({ origin: 'clone' }).request).toEqual({
+    expect(validateProjectCreateForm(form({ origin: 'clone' })).request).toEqual({
       description: 'A focused project.',
       name: 'Garden Planner',
       origin: 'clone',
@@ -48,6 +48,8 @@ describe('validateProjectCreateForm', () => {
     expect(isRepositoryUrl('https://token@example.test/team/project.git')).toBe(false);
     expect(isRepositoryUrl('ssh://user@example.test/team/project.git')).toBe(false);
     expect(isRepositoryUrl('git@example.test:team/project.git')).toBe(true);
+    expect(isRepositoryUrl('http://127.0.0.1:8788/sandbox-repository.git')).toBe(true);
+    expect(isRepositoryUrl('http://localhost:8788/sandbox-repository.git')).toBe(false);
   });
 
   it('requires a nonblank project name for every mode', () => {

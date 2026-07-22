@@ -1,0 +1,83 @@
+# P7.5 workspace creation and repository clone on the disposable local-only sandbox.
+#
+# Preconditions:
+#   - `scripts/device_sandbox.py prepare` created the fixture.
+#   - SANDBOX_API_URL is the fixture-only API URL and DEVICE_TOKEN is its
+#     fixture-only token; both are passed only at runtime.
+#   - `python -m http.server --bind 127.0.0.1 --directory <fixture>/git-fixture <port>`
+#     serves the fixture bare remote, and SANDBOX_GIT_URL is its 127.0.0.1 URL.
+# This creates only two workspaces below the marker-protected disposable root.
+appId: com.anonymous.hermesmobilecontrol
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
+- tapOn:
+    id: "header-settings"
+- assertVisible: "Settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-api-url"
+    timeout: 5000
+- tapOn:
+    id: "settings-api-url"
+- eraseText
+- inputText: "${SANDBOX_API_URL}"
+- tapOn:
+    id: "settings-api-token"
+- eraseText
+- inputText: "${DEVICE_TOKEN}"
+- tapOn:
+    id: "settings-save"
+- assertVisible:
+    id: "settings-save-message"
+- pressKey: back
+- pressKey: back
+- tapOn:
+    id: "nav-projects"
+- tapOn:
+    id: "project-create-new"
+- tapOn:
+    id: "project-create-name"
+- inputText: "Sandbox Workspace Create"
+- hideKeyboard
+- tapOn:
+    id: "project-create-submit"
+- assertVisible:
+    id: "project-detail-sandbox-workspace-create"
+- scrollUntilVisible:
+    element:
+      id: "project-workspace-primary-folder"
+    direction: DOWN
+- assertVisible:
+    id: "project-workspace-primary-folder"
+- assertVisible:
+    id: "project-workspace-repository-folder"
+- pressKey: back
+- tapOn:
+    id: "project-create-new"
+- tapOn:
+    id: "project-create-name"
+- inputText: "Sandbox Clone Create"
+- hideKeyboard
+- tapOn:
+    id: "project-origin-clone"
+- tapOn:
+    id: "project-create-repository-url"
+- inputText: "${SANDBOX_GIT_URL}"
+- hideKeyboard
+- tapOn:
+    id: "project-create-submit"
+- assertVisible:
+    id: "project-detail-sandbox-clone-create"
+- scrollUntilVisible:
+    element:
+      id: "project-workspace-primary-folder"
+    direction: DOWN
+- assertVisible:
+    id: "project-workspace-primary-folder"
+- assertVisible:
+    id: "project-workspace-repository-folder"

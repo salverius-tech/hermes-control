@@ -114,6 +114,18 @@ def test_strict_native_mode_rejects_unknown_project_and_outside_execution_folder
     assert outside.status_code == 400
 
 
+def test_strict_native_mode_rejects_legacy_default_project_id(monkeypatch, tmp_path):
+    client, _ = _client(monkeypatch, tmp_path)
+    response = client.post(
+        "/tasks",
+        headers={"Authorization": "Bearer dev-token"},
+        json={"prompt": "Do not migrate this implicitly", "project_id": "default"},
+    )
+
+    assert response.status_code == 400
+    assert "Unknown Hermes project: default" in response.json()["detail"]
+
+
 def test_retry_validates_native_session_and_uses_its_working_directory(monkeypatch, tmp_path):
     client, workspace = _client(monkeypatch, tmp_path)
     home = tmp_path / "hermes-home"

@@ -169,6 +169,22 @@ def test_clone_origin_rejects_unsafe_url_without_creating_workspace(monkeypatch,
     assert not (root / "unsafe").exists()
 
 
+def test_clone_origin_allows_only_loopback_plain_http_for_disposable_fixture(monkeypatch, tmp_path):
+    client, _ = _client(monkeypatch, tmp_path)
+    headers = {"Authorization": "Bearer dev-token"}
+
+    response = client.post(
+        "/projects",
+        headers=headers,
+        json={"name": "Local Fixture", "origin": "clone", "repository_url": "http://127.0.0.1:8788/fixture.git"},
+    )
+
+    # URL validation accepts loopback only; the fixture does not run a Git server
+    # in this focused API test, so clone itself is expected to fail safely.
+    assert response.status_code == 400
+    assert "repository clone failed" in response.json()["detail"]
+
+
 def test_clone_failure_preserves_workspace_state(monkeypatch, tmp_path):
     client, root = _client(monkeypatch, tmp_path)
 
