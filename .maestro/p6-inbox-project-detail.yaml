@@ -1,0 +1,64 @@
+# P6.2/P6.3 populated-state device validation.
+#
+# Preconditions (intentionally external to this non-mutating UI flow):
+#   1. The installed app has already saved authenticated Control API settings.
+#   2. The API fixture exposes PROJECT_ID and three unarchived work threads whose
+#      latest attempts are attention-required, running/queued, and completed.
+#   3. Set PROJECT_ID, P6_ATTENTION_ROOT, P6_ACTIVE_ROOT, and P6_RECENT_ROOT in
+#      the Maestro environment to the fixture's project/root-task IDs.
+#
+# Do not add this data-dependent flow to scripts/verify.py until the repository
+# owns a deterministic fixture setup/teardown command. The existing smoke flow
+# remains usable on an empty device/API state.
+appId: com.anonymous.hermesmobilecontrol
+---
+# P6.2: Inbox has mutually exclusive attention, active, and recent sections.
+- launchApp
+- assertVisible:
+    id: "inbox-section-attention"
+- assertVisible:
+    id: "inbox-section-active"
+- assertVisible:
+    id: "inbox-section-recent"
+- assertVisible:
+    id: "inbox-thread-attention-${P6_ATTENTION_ROOT}"
+- assertVisible:
+    id: "inbox-thread-active-${P6_ACTIVE_ROOT}"
+- assertVisible:
+    id: "inbox-thread-recent-${P6_RECENT_ROOT}"
+
+# Enter the fixture project through the stable project-card selector.
+- tapOn:
+    id: "nav-projects"
+- tapOn:
+    id: "project-card-${PROJECT_ID}"
+
+# P6.3: Project detail preserves the intended priority order.
+- assertVisible:
+    id: "project-detail-${PROJECT_ID}"
+- assertVisible:
+    id: "project-section-attention"
+- assertVisible:
+    id: "project-thread-${P6_ATTENTION_ROOT}"
+- scroll
+- assertVisible:
+    id: "project-section-active"
+- assertVisible:
+    id: "project-thread-${P6_ACTIVE_ROOT}"
+- scroll
+- assertVisible:
+    id: "project-section-recent"
+- assertVisible:
+    id: "project-thread-${P6_RECENT_ROOT}"
+- scroll
+- assertVisible:
+    id: "project-section-sessions"
+- scroll
+- assertVisible:
+    id: "project-section-workspace"
+- assertVisible:
+    id: "project-workspace-primary-folder"
+- assertVisible:
+    id: "project-workspace-repository-folder"
+- assertVisible:
+    id: "project-manage"

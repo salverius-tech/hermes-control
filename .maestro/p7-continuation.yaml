@@ -1,0 +1,40 @@
+# Disposable local-sandbox physical-device continuation flow.
+# Requires p7-device-task.yaml (or equivalent saved fixture settings) first.
+appId: com.anonymous.hermesmobilecontrol
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
+- tapOn:
+    id: "header-settings"
+- assertVisible: "Settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-api-url"
+    timeout: 5000
+- tapOn:
+    id: "settings-api-url"
+- eraseText
+- inputText: "http://127.0.0.1:8787"
+- tapOn:
+    id: "settings-api-token"
+- eraseText
+- inputText: ${DEVICE_TOKEN}
+- tapOn:
+    id: "settings-save"
+- assertVisible:
+    id: "settings-save-message"
+- pressKey: back
+- pressKey: back
+- tapOn:
+    id: "inbox-thread-attention-${P6_ATTENTION_ROOT}"
+- assertVisible:
+    id: "task-continue"
+- tapOn:
+    id: "task-continue"
+- assertVisible: "Task detail"
+- assertVisible: "Attempt timeline · 2"
+- assertVisible: "COMPLETED"

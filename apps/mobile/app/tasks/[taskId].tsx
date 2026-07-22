@@ -5,8 +5,10 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { readCache, writeCache } from '@/api/cache';
-import { apiFetch, TaskEvent, TaskSummary } from '@/api/client';
+import { apiFetch, TaskEvent, TaskSummary, WorkThreadSummary } from '@/api/client';
 import { ExpandableDetails } from '@/components/ExpandableDetails';
+import { approvalDecisionLabel, latestApprovalAudit } from '@/features/tasks/approval-audit';
+import { attemptTimeline } from '@/features/tasks/task-detail-state';
 import { MetricCard } from '@/components/MetricCard';
 import { MetadataRow } from '@/components/MetadataRow';
 import { bottomNavigationHeight } from '@/navigation/constants';
@@ -24,6 +26,7 @@ export default function TaskDetailScreen() {
   const insets = useSafeAreaInsets();
   const [task, setTask] = useState<TaskSummary | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [thread, setThread] = useState<WorkThreadSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,10 +47,12 @@ export default function TaskDetailScreen() {
           apiFetch<TaskSummary>(apiUrl, apiToken, `/tasks/${taskId}`),
           apiFetch<TaskEvent[]>(apiUrl, apiToken, `/tasks/${taskId}/events`),
         ]);
+        const threadResult = await apiFetch<WorkThreadSummary>(apiUrl, apiToken, `/work-threads/${taskResult.root_task_id || taskResult.task_id}`);
         await writeCache(AsyncStorage, `tasks:${taskId}`, { events: eventResult, task: taskResult });
         if (mounted) {
           setTask(taskResult);
           setEvents(eventResult);
+          setThread(threadResult);
         }
       } catch (err) {
         const cached = await readCache<{ task: TaskSummary; events: TaskEvent[] }>(AsyncStorage, `tasks:${taskId}`);
@@ -156,6 +161,7 @@ export default function TaskDetailScreen() {
   const canRecover = task?.status === 'failed' || task?.status === 'blocked' || task?.status === 'completed';
   const canCancel = task?.status === 'queued' || task?.status === 'running' || task?.status === 'awaiting_approval';
   const canArchive = task && !canCancel && !['awaiting_approval', 'queued', 'running'].includes(task.status);
+  const approvalAudit = latestApprovalAudit(events);
 
   return (
     <ScrollView contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + bottomNavigationHeight + spacing.xl }]}> 
@@ -165,6 +171,11 @@ export default function TaskDetailScreen() {
       {actionMessage ? <Text accessibilityLiveRegion="polite" style={styles.success}>{actionMessage}</Text> : null}
       {task ? (
         <>
+          {thread && thread.latest_attempt.task_id !== task.task_id ? (
+            <Pressable accessibilityRole="link" onPress={() => router.replace(`/tasks/${thread.latest_attempt.task_id}`)} style={styles.latestBanner}>
+              <Text style={styles.latestText}>A newer attempt exists: view latest outcome</Text>
+            </Pressable>
+          ) : null}
           <MetricCard title={task.title}>
             <View style={styles.statusRow}>
               <StatusPill status={task.status} />
@@ -229,6 +240,13 @@ export default function TaskDetailScreen() {
               ) : null}
               {canArchive ? <Pressable accessibilityRole="button" disabled={actionPending || offline || stale} onPress={confirmArchive} style={[styles.archiveButton, (actionPending || offline || stale) && styles.disabledButton]} testID="task-archive"><Text style={styles.archiveButtonText}>{task.archived_at ? 'Restore to inbox' : 'Remove from inbox'}</Text></Pressable> : null}
             </View>
+            {approvalAudit ? <View style={styles.approvalAudit}>
+              <Text style={styles.approvalHeading}>Approval audit · {approvalDecisionLabel(approvalAudit.status)}</Text>
+              <MetadataRow label="Actor" value={approvalAudit.actor} />
+              <MetadataRow label="Device" value={approvalAudit.deviceId} />
+              <MetadataRow label="Reason" value={approvalAudit.reason} />
+              <MetadataRow label="Recorded" value={approvalAudit.createdAt} />
+            </View> : null}
           </MetricCard>
 
           <ExpandableDetails label="Task context">
@@ -237,6 +255,12 @@ export default function TaskDetailScreen() {
             <MetadataRow label="Execution folder" value={task.execution_folder} />
             <MetadataRow label="Session" value={task.session_id} />
           </ExpandableDetails>
+
+          {thread ? <ExpandableDetails initiallyExpanded label={`Attempt timeline · ${thread.attempts.length}`}>
+            {attemptTimeline(thread, task.task_id).map(({ task: attempt, label, isCurrent }) => <Pressable accessibilityRole="link" key={attempt.task_id} onPress={() => router.replace(`/tasks/${attempt.task_id}`)} style={[styles.attemptRow, isCurrent && styles.currentAttempt]} testID={`task-attempt-${attempt.task_id}`}>
+              <View><Text style={styles.attemptLabel}>{label}{isCurrent ? ' · Viewing' : ''}</Text><Text style={styles.muted}>{attempt.title}</Text></View><StatusPill status={attempt.status} />
+            </Pressable>)}
+          </ExpandableDetails> : null}
 
           {editingRetry ? (
             <MetricCard title={continuationMode ? 'Continue Hermes session' : 'Edit before retry'} subtitle="The original task remains unchanged; this creates a linked task.">
@@ -269,6 +293,10 @@ export default function TaskDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  approvalAudit: { borderTopColor: colors.border, borderTopWidth: 1, gap: spacing.xs, marginTop: spacing.md, paddingTop: spacing.md },
+  approvalHeading: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  attemptLabel: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  attemptRow: { alignItems: 'center', borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -303,6 +331,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
   },
+  currentAttempt: { backgroundColor: colors.primarySoft, borderRadius: 10, paddingHorizontal: spacing.sm },
   disabledButton: {
     opacity: 0.6,
   },
@@ -340,6 +369,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Courier',
     lineHeight: 22,
   },
+  latestBanner: { backgroundColor: colors.primarySoft, borderColor: colors.primary, borderRadius: 12, borderWidth: 1, padding: spacing.md },
+  latestText: { color: colors.text, fontWeight: '800' },
   muted: {
     color: colors.muted,
   },

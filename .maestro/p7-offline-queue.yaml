@@ -1,0 +1,46 @@
+# Continue an already-configured disposable local fixture after its loopback API
+# server and adb reverse mapping have been stopped. Do not use clearState here:
+# the cached native project list is the deliberate offline precondition.
+appId: com.anonymous.hermesmobilecontrol
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
+- tapOn:
+    id: "nav-new"
+- tapOn:
+    id: "new-task-prompt"
+- eraseText
+- inputText: "offline-device-queue-task"
+- hideKeyboard
+- scroll
+- tapOn:
+    id: "new-task-project-${PROJECT_ID}"
+- scrollUntilVisible:
+    element:
+      id: "new-task-submit"
+    direction: UP
+- tapOn:
+    id: "new-task-submit"
+- tapOn:
+    id: "nav-activity"
+- extendedWaitUntil:
+    visible: "Retry now"
+    timeout: 15000
+- assertVisible: "Retry now"
+- assertVisible: "Discard"
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
+- tapOn:
+    id: "nav-activity"
+- extendedWaitUntil:
+    visible: "Retry now"
+    timeout: 8000
+- assertVisible: "Retry now"
+- assertVisible: "Discard"

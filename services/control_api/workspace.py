@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 import time
@@ -164,7 +165,7 @@ class HermesWorkspaceStore:
         return result
 
     def list_directories(self, path: str | None = None) -> list[str]:
-        roots = [Path(item).expanduser().resolve() for item in __import__("os").getenv("CONTROL_API_PROJECT_ROOTS", str(Path.home() / "repos")).split(":") if item]
+        roots = self.project_roots()
         current = Path(path).expanduser().resolve() if path else roots[0]
         if not any(current == root or root in current.parents for root in roots):
             raise ValueError("folder is outside approved project roots")
@@ -174,7 +175,7 @@ class HermesWorkspaceStore:
 
     def validate_execution_folder(self, path: str) -> str:
         resolved = Path(path).expanduser().resolve()
-        roots = [Path(item).expanduser().resolve() for item in __import__("os").getenv("CONTROL_API_PROJECT_ROOTS", str(Path.home() / "repos")).split(":") if item]
+        roots = self.project_roots()
         if not any(resolved == root or root in resolved.parents for root in roots):
             raise ValueError("execution folder is outside approved project roots")
         if not resolved.is_dir():
@@ -190,7 +191,8 @@ class HermesWorkspaceStore:
             raise ValueError("execution folder is not part of the selected Hermes project")
         return resolved
 
-    def validate_session(self, session_id: str, project_id: str) -> None:
+    def validate_session(self, session_id: str, project_id: str) -> str:
+        """Return the validated native working directory for a resumable session."""
         if not self.state_path.exists():
             raise ValueError(f"Hermes session not found: {session_id}")
         project = self.get_project(project_id)
@@ -200,6 +202,10 @@ class HermesWorkspaceStore:
             row = db.execute("SELECT cwd, archived FROM sessions WHERE id = ?", (session_id,)).fetchone()
         if row is None or row[1] or not any(_is_within(row[0], folder) for folder in project.folders):
             raise ValueError(f"Hermes session is not valid for project: {session_id}")
+        try:
+            return self.validate_project_execution_folder(project_id, row[0])
+        except ValueError as exc:
+            raise ValueError(f"Hermes session is not valid for project: {session_id}") from exc
 
     def _get_row(self, project_id: str) -> tuple | None:
         with sqlite3.connect(self.projects_path) as db:
@@ -208,12 +214,18 @@ class HermesWorkspaceStore:
                 (project_id, project_id),
             ).fetchone()
 
+    @staticmethod
+    def project_roots() -> list[Path]:
+        """Return approved roots using the host path separator (``;`` on Windows)."""
+        configured = os.getenv("CONTROL_API_PROJECT_ROOTS", str(Path.home() / "repos"))
+        return [Path(item).expanduser().resolve() for item in configured.split(os.pathsep) if item]
+
     def _folder_rows(self, project_id: str) -> list[tuple]:
         with sqlite3.connect(self.projects_path) as db:
             return db.execute("SELECT path, is_primary FROM project_folders WHERE project_id = ?", (project_id,)).fetchall()
 
     def _validate_folders(self, folders: list[str]) -> None:
-        roots = [Path(path).expanduser().resolve() for path in __import__("os").getenv("CONTROL_API_PROJECT_ROOTS", str(Path.home() / "repos")).split(":") if path]
+        roots = self.project_roots()
         for raw in folders:
             path = Path(raw).expanduser().resolve()
             if not path.is_dir():

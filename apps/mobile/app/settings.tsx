@@ -7,6 +7,7 @@ import { ExpandableDetails } from '@/components/ExpandableDetails';
 import { ActionButton } from '@/components/ActionButton';
 import { MetadataRow } from '@/components/MetadataRow';
 import { MetricCard } from '@/components/MetricCard';
+import { diagnosticReadiness } from '@/features/operations/diagnostics-state';
 import { bottomNavigationHeight } from '@/navigation/constants';
 import { useDataStore } from '@/state/data-store';
 import { useSettingsStore } from '@/state/settings';
@@ -19,7 +20,7 @@ export default function SettingsScreen() {
   const [draftToken, setDraftToken] = useState(apiToken);
   const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const { websocket, websocketUrl, websocketError, websocketCloseCode, websocketCloseReason, lastSync, offline, stale } = useDataStore();
+  const { websocket, websocketUrl, websocketError, websocketCloseCode, websocketCloseReason, websocketReconnects, lastSync, offline, stale } = useDataStore();
 
   async function saveSettings() {
     setSaveMessage('Saving settings...');
@@ -53,6 +54,7 @@ export default function SettingsScreen() {
     <MetricCard title="Connection state">
       <MetadataRow label="Authentication" value={draftToken.trim() ? 'Configured' : 'Not configured'} />
       <MetadataRow label="WebSocket" value={websocket} />
+      <MetadataRow label="Reconnects" value={String(websocketReconnects)} />
       <MetadataRow label="Last sync" value={lastSync ? new Date(lastSync).toLocaleString() : 'Not yet'} />
       <MetadataRow label="Data" value={offline || stale ? 'Offline / stale' : 'Current'} />
       <MetadataRow label="Endpoint" value={websocketUrl || 'Not configured'} />
@@ -62,7 +64,7 @@ export default function SettingsScreen() {
 
     <ExpandableDetails label="Diagnostics">
       <ActionButton disabled={!draftToken.trim()} label="Load diagnostics" onPress={loadDiagnostics} testID="settings-load-diagnostics" />
-      {diagnostics ? <><MetadataRow label="API" value={diagnostics.version} /><MetadataRow label="Storage" value={diagnostics.storage} /><MetadataRow label="Schema" value={diagnostics.schema_version} /><MetadataRow label="Execution" value={diagnostics.execution_mode} /><MetadataRow label="Events" value={diagnostics.websocket_path} /></> : <Text style={styles.help}>Load authenticated diagnostics when you need backend details.</Text>}
+      {diagnostics ? <><MetadataRow label="API" value={diagnostics.version} /><MetadataRow label="Storage" value={diagnostics.storage} /><MetadataRow label="Schema" value={diagnostics.schema_version} /><MetadataRow label="Execution" value={diagnostics.execution_mode} /><MetadataRow label="Events" value={diagnostics.websocket_path} />{diagnosticReadiness(diagnostics).map(([label, value]) => <MetadataRow key={label} label={label} value={value} />)}</> : <Text style={styles.help}>Load authenticated diagnostics when you need backend details.</Text>}
     </ExpandableDetails>
     <Text style={styles.help}>Use a PC LAN IP or Tailscale host when testing from a physical Android device.</Text>
   </ScrollView>;

@@ -30,6 +30,31 @@ def test_projection_updates_task_status_and_progress_log():
     assert updated.progress_log == ["Hermes task started"]
 
 
+def test_projection_groups_root_and_retry_with_latest_outcome():
+    projection = TaskProjection()
+    root = projection.create_task(TaskCreateRequest(prompt="Repair the deployment", project_id="ops"))
+    projection.update_task(root.task_id, status=TaskStatus.FAILED)
+    retry = projection.create_task(
+        TaskCreateRequest(
+            prompt="Repair the deployment",
+            project_id="ops",
+            parent_task_id=root.task_id,
+            root_task_id=root.task_id,
+            relation="retry",
+        )
+    )
+    projection.update_task(retry.task_id, status=TaskStatus.COMPLETED)
+
+    threads = projection.list_work_threads(project_id="ops")
+
+    assert len(threads) == 1
+    thread = threads[0]
+    assert thread.root_task_id == root.task_id
+    assert [attempt.task_id for attempt in thread.attempts] == [root.task_id, retry.task_id]
+    assert thread.latest_attempt.task_id == retry.task_id
+    assert thread.latest_outcome == TaskStatus.COMPLETED
+
+
 def test_projection_returns_project_counts():
     projection = TaskProjection()
     projection.create_task(TaskCreateRequest(prompt="Queued", project_id="alpha"))

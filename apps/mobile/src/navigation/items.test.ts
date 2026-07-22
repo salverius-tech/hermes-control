@@ -4,7 +4,7 @@ import { isActiveRoute, navigationItems } from './items';
 
 describe('navigationItems', () => {
   it('keeps primary screens reachable from the bottom bar', () => {
-    expect(navigationItems.map((item) => item.href)).toEqual(['/', '/tasks', '/new-task', '/projects', '/attention']);
+    expect(navigationItems.map((item) => item.href)).toEqual(['/', '/projects', '/new-task', '/tasks', '/more']);
   });
 
   it('replaces navigation history when returning home from the bottom bar', () => {
@@ -16,7 +16,7 @@ describe('navigationItems', () => {
   });
 
   it('uses named vector icons instead of font glyphs', () => {
-    expect(navigationItems.map((item) => item.iconName)).toEqual(['home', 'list', 'plus-circle', 'folder', 'bell']);
+    expect(navigationItems.map((item) => item.iconName)).toEqual(['home', 'folder', 'plus-circle', 'list', 'bell']);
   });
 });
 

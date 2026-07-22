@@ -191,6 +191,40 @@ async def test_local_command_executor_passes_query_prompt_as_argument():
 
 
 @pytest.mark.anyio
+async def test_local_command_executor_resumes_native_session_before_query_arguments(monkeypatch):
+    captured = {}
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdout = asyncio.StreamReader()
+            self.stderr = asyncio.StreamReader()
+            self.stdout.feed_data(b"completed\n")
+            self.stdout.feed_eof()
+            self.stderr.feed_eof()
+            self.stdin = None
+            self.returncode = 0
+
+        async def wait(self) -> None:
+            return None
+
+    async def create_subprocess_exec(*command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
+    executor = LocalHermesCommandExecutor(("hermes", "chat", "--ignore-rules", "-q"))
+
+    result = await executor.run(TaskCreateRequest(prompt="continue native work", session_id="native-session"))
+
+    assert captured["command"] == (
+        "hermes", "chat", "--resume", "native-session", "--ignore-rules", "-q", "continue native work"
+    )
+    assert captured["kwargs"]["stdin"] is asyncio.subprocess.DEVNULL
+    assert result.result_summary == "completed"
+
+
+@pytest.mark.anyio
 async def test_local_command_executor_raises_stderr_for_nonzero_exit():
     executor = LocalHermesCommandExecutor(
         (sys.executable, "-c", "import sys; print('bad command', file=sys.stderr); raise SystemExit(7)")

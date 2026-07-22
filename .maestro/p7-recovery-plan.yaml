@@ -1,0 +1,40 @@
+# Disposable loopback-only physical-device recovery-plan confirmation.
+#
+# Requires scripts/device_sandbox.py prepare + serve, adb reverse tcp:8787 tcp:8787,
+# and -e DEVICE_TOKEN=<fixture-only token> -e RECOVERY_SLUG=<fixture-only slug>
+# -e API_PORT=<fixture loopback port>.
+# The fixture's recovery workspace has no native project record before this flow.
+appId: com.anonymous.hermesmobilecontrol
+---
+- clearState
+- launchApp
+- tapOn:
+    id: "header-settings"
+- tapOn:
+    id: "settings-api-url"
+- eraseText
+- inputText: "http://127.0.0.1:${API_PORT}"
+- tapOn:
+    id: "settings-api-token"
+- eraseText
+- inputText: ${DEVICE_TOKEN}
+- tapOn:
+    id: "settings-save"
+- assertVisible:
+    id: "settings-save-message"
+- pressKey: back
+- pressKey: back
+- tapOn:
+    id: "nav-more"
+- tapOn:
+    id: "more-recovery-plan"
+- assertVisible:
+    id: "recovery-entry-${RECOVERY_SLUG}"
+- tapOn:
+    id: "recovery-restore-ready"
+- tapOn: "Restore"
+- assertVisible:
+    id: "recovery-apply-message"
+- assertVisible: "Restored: ${RECOVERY_SLUG}."
+- assertNotVisible:
+    id: "recovery-restore-ready"

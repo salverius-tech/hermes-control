@@ -18,6 +18,18 @@ class ConnectionManager:
         if websocket in self._connections:
             self._connections.remove(websocket)
 
+    async def close_all(self, *, code: int = 1012, reason: str = "sandbox disconnect") -> int:
+        """Close all current clients for an explicitly enabled test fixture."""
+        connections = list(self._connections)
+        for websocket in connections:
+            try:
+                await websocket.close(code=code, reason=reason)
+            except RuntimeError:
+                pass
+            finally:
+                self.disconnect(websocket)
+        return len(connections)
+
     async def send_snapshot(
         self,
         websocket: WebSocket,

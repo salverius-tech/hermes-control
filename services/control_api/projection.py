@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskExecutionState, TaskStatus, TaskSummary
+from .models import AgentStatus, ProjectSummary, TaskCreateRequest, TaskEvent, TaskExecutionState, TaskStatus, TaskSummary, WorkThreadSummary
 from .storage import TaskStore
 from .workspace import HermesWorkspaceStore
 
@@ -16,9 +16,16 @@ class TaskStateError(ValueError):
 class TaskProjection:
     """Task read model and event projection for the mobile control API."""
 
-    def __init__(self, store: TaskStore | None = None, workspace: HermesWorkspaceStore | None = None) -> None:
+    def __init__(
+        self,
+        store: TaskStore | None = None,
+        workspace: HermesWorkspaceStore | None = None,
+        *,
+        allow_synthetic_projects: bool = True,
+    ) -> None:
         self._store = store
         self.workspace = workspace
+        self.allow_synthetic_projects = allow_synthetic_projects
         self._tasks: dict[str, TaskSummary] = {task.task_id: task for task in store.load_tasks()} if store else {}
         self._events: dict[str, list[TaskEvent]] = defaultdict(list)
         if store:
@@ -64,6 +71,44 @@ class TaskProjection:
     def list_tasks(self, *, include_archived: bool = False) -> list[TaskSummary]:
         tasks = self._tasks.values() if include_archived else (task for task in self._tasks.values() if task.archived_at is None)
         return sorted(tasks, key=lambda task: task.created_at, reverse=True)
+
+    def list_work_threads(self, *, project_id: str | None = None, include_archived: bool = False) -> list[WorkThreadSummary]:
+        groups: dict[str, list[TaskSummary]] = defaultdict(list)
+        for task in self.list_tasks(include_archived=include_archived):
+            if project_id is None or task.project_id == project_id:
+                groups[task.root_task_id or task.task_id].append(task)
+        threads = []
+        for root, attempts in groups.items():
+            ordered_attempts = self._order_work_thread_attempts(root, attempts)
+            latest = max(enumerate(ordered_attempts), key=lambda item: (item[1].created_at, item[0]))[1]
+            threads.append(WorkThreadSummary(root_task_id=root, project_id=latest.project_id, attempts=ordered_attempts, latest_attempt=latest, latest_outcome=TaskStatus(latest.status)))
+        return sorted(threads, key=lambda thread: thread.latest_attempt.created_at, reverse=True)
+
+    @staticmethod
+    def _order_work_thread_attempts(root_task_id: str, attempts: list[TaskSummary]) -> list[TaskSummary]:
+        """Keep immutable attempts chronological without using random task IDs as tie-breakers."""
+        task_ids = {task.task_id for task in attempts}
+        children: dict[str, list[TaskSummary]] = defaultdict(list)
+        roots: list[TaskSummary] = []
+        for task in attempts:
+            if task.task_id == root_task_id or task.parent_task_id not in task_ids:
+                roots.append(task)
+            else:
+                children[task.parent_task_id].append(task)
+
+        def sort_key(task: TaskSummary) -> datetime:
+            return task.created_at
+
+        ordered: list[TaskSummary] = []
+
+        def append_attempt_and_descendants(task: TaskSummary) -> None:
+            ordered.append(task)
+            for child in sorted(children[task.task_id], key=sort_key):
+                append_attempt_and_descendants(child)
+
+        for attempt in sorted(roots, key=sort_key):
+            append_attempt_and_descendants(attempt)
+        return ordered
 
     def get_task(self, task_id: str) -> TaskSummary | None:
         return self._tasks.get(task_id)
@@ -144,6 +189,7 @@ class TaskProjection:
         execution_state: TaskExecutionState | None = None,
         execution_phase: str | None = None,
         execution_detail: str | None = None,
+        terminal_reason: str | None = None,
         event_type: str = "task.updated",
         event_metadata: dict[str, object] | None = None,
     ) -> TaskSummary:
@@ -175,6 +221,8 @@ class TaskProjection:
             update_data["execution_phase"] = execution_phase
         if execution_detail is not None:
             update_data["execution_detail"] = execution_detail
+        if terminal_reason is not None:
+            update_data["terminal_reason"] = terminal_reason
         update_data["updated_at"] = datetime.now(timezone.utc)
         updated = TaskSummary(**update_data)
         self._tasks[task_id] = updated
@@ -225,6 +273,8 @@ class TaskProjection:
 
         projects: list[ProjectSummary] = []
         for project_id, status_counts in counts.items():
+            if not self.allow_synthetic_projects and project_id not in known:
+                continue
             project = known.get(project_id, ProjectSummary(project_id=project_id, name=self._project_name(project_id)))
             projects.append(project.model_copy(update={
                 "queued_count": status_counts[TaskStatus.QUEUED] + status_counts[TaskStatus.AWAITING_APPROVAL],
@@ -235,7 +285,7 @@ class TaskProjection:
         for project in workspace_projects:
             if project.project_id not in {item.project_id for item in projects}:
                 projects.append(project)
-        if not projects:
+        if not projects and self.allow_synthetic_projects:
             projects.append(ProjectSummary(project_id="default", name="Default"))
         return sorted(projects, key=lambda project: project.name.lower())
 

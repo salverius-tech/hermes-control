@@ -17,5 +17,5 @@ appId: com.anonymous.hermesmobilecontrol
 - tapOn:
     id: "new-task-template-run-tests"
 - tapOn:
-    id: "nav-home"
+    id: "nav-inbox"
 - assertVisible: "Hermes Control"

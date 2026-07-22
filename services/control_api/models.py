@@ -24,6 +24,8 @@ class TaskExecutionState(StrEnum):
     ACTIVE = "active"
     QUIET = "quiet"
     STALLED = "stalled"
+    STALE_HEARTBEAT = "stale_heartbeat"
+    INTERRUPTED = "interrupted"
 
 
 class TaskCreateRequest(BaseModel):
@@ -88,6 +90,15 @@ class TaskSummary(BaseModel):
     execution_state: TaskExecutionState = TaskExecutionState.UNKNOWN
     execution_phase: str | None = None
     execution_detail: str | None = None
+    terminal_reason: str | None = None
+
+
+class WorkThreadSummary(BaseModel):
+    root_task_id: str
+    project_id: str
+    attempts: list[TaskSummary]
+    latest_attempt: TaskSummary
+    latest_outcome: TaskStatus
 
 
 class TaskEvent(BaseModel):
@@ -140,6 +151,25 @@ class ProjectCreateRequest(BaseModel):
     description: str | None = None
     folders: list[str] = Field(default_factory=list)
     primary_folder: str | None = None
+    origin: Literal["adopt", "workspace", "clone"] = "adopt"
+    repository_url: str | None = None
+
+
+class RepositoryAttachRequest(BaseModel):
+    repository_url: str = Field(min_length=1)
+
+
+class RecoveryApplyRequest(BaseModel):
+    slugs: list[str] = Field(min_length=1)
+    confirm: bool
+
+    @field_validator("confirm", mode="before")
+    @classmethod
+    def confirm_must_be_literal_true(cls, value: object) -> bool:
+        """Require the JSON boolean `true`, not a truthy/coerced substitute."""
+        if type(value) is not bool or value is not True:
+            raise ValueError("confirm must be the literal boolean true")
+        return value
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -162,6 +192,23 @@ class GuidanceRequest(BaseModel):
     @field_validator("prompt")
     @classmethod
     def guidance_must_not_be_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("prompt must not be blank")
+        return stripped
+
+
+class NewSessionRequest(BaseModel):
+    """Create a linked independent attempt, optionally changing the prompt."""
+
+    prompt: str | None = None
+    requires_approval: bool = False
+
+    @field_validator("prompt")
+    @classmethod
+    def new_session_prompt_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         stripped = value.strip()
         if not stripped:
             raise ValueError("prompt must not be blank")

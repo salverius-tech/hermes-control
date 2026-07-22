@@ -6,6 +6,8 @@ export const taskQueueStorageKey = 'tasks:offline-queue:v1';
 
 export type QueuedTask = {
   local_id: string;
+  /** Stable request identity, created before the first network attempt. */
+  idempotency_key: string;
   request: TaskCreateRequest;
   state: 'pending' | 'retrying';
   attempts: number;
@@ -37,9 +39,11 @@ async function saveTaskQueue(storage: QueueStorage, queue: QueuedTask[]): Promis
   await storage.setItem(taskQueueStorageKey, JSON.stringify(queue));
 }
 
-export async function enqueueTask(storage: QueueStorage, request: TaskCreateRequest, now = new Date(), localId?: string): Promise<QueuedTask> {
+export async function enqueueTask(storage: QueueStorage, request: TaskCreateRequest, now = new Date(), idempotencyKey?: string): Promise<QueuedTask> {
+  const key = idempotencyKey || `mobile-${now.getTime()}-${Math.random().toString(16).slice(2)}`;
   const item: QueuedTask = {
-    local_id: localId || `local-${now.getTime()}-${Math.random().toString(16).slice(2)}`,
+    local_id: `local-${key}`,
+    idempotency_key: key,
     request,
     state: 'pending',
     attempts: 0,
@@ -78,7 +82,9 @@ export async function flushTaskQueue(
     try {
       const task = await apiFetch<TaskSummary>(apiUrl, apiToken, '/tasks', {
         method: 'POST',
-        headers: { 'Idempotency-Key': item.local_id },
+        // Older persisted queue entries used local_id as their key. Keep those
+        // retryable while new entries retain an explicit transport identity.
+        headers: { 'Idempotency-Key': item.idempotency_key || item.local_id },
         body: JSON.stringify(item.request),
       });
       completed.push(task);

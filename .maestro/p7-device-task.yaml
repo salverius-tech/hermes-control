@@ -1,0 +1,49 @@
+# Disposable local-sandbox physical-device task submission flow.
+#
+# Requires `scripts/device_sandbox.py prepare` + `serve` and an `adb reverse`
+# mapping to its loopback server. API_URL is the exact loopback fixture URL.
+# DEVICE_TOKEN is the fixture token printed by
+# `prepare`, never a real Control API credential. PROJECT_ID is the deterministic
+# native-project slug printed by `prepare`.
+appId: com.anonymous.hermesmobilecontrol
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "header-settings"
+    timeout: 8000
+- tapOn:
+    id: "header-settings"
+- assertVisible: "Settings"
+- tapOn:
+    id: "settings-api-url"
+- eraseText
+- inputText: ${API_URL}
+- tapOn:
+    id: "settings-api-token"
+- eraseText
+- inputText: ${DEVICE_TOKEN}
+- tapOn:
+    id: "settings-save"
+- assertVisible:
+    id: "settings-save-message"
+- pressKey: back
+- pressKey: back
+- tapOn:
+    id: "nav-new"
+- tapOn:
+    id: "new-task-prompt"
+- inputText: "print(\"mobile device task\")"
+- scroll
+- assertVisible:
+    id: "new-task-project-${PROJECT_ID}"
+- tapOn:
+    id: "new-task-project-${PROJECT_ID}"
+- scrollUntilVisible:
+    element:
+      id: "new-task-submit"
+    direction: UP
+- tapOn:
+    id: "new-task-submit"
+- assertVisible: "Task detail"

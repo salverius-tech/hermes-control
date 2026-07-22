@@ -145,6 +145,7 @@ See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-bou
 - `docs/PRD.md` — product requirements, status, roadmap, risks, and remaining work.
 - `TESTING.md` — verification strategy and coverage map.
 - `docs/API.md` — REST/WebSocket contract.
+- `docs/NATIVE_STORE_ROUTE_MAPPING.md` — repository-verified native Hermes store ownership, schema fixture, and API route mapping.
 - `docs/OPERATIONS.md` — local runbook, Android build/sideload notes, troubleshooting.
 - `docs/DEPLOYMENT.md` — Proxmox LXC + Caddy production deployment guide.
 - `deploy/` — example systemd service, Caddy route, and environment file.
