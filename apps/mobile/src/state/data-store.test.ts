@@ -66,7 +66,7 @@ const taskUpdate = (seq: number, next: TaskSummary) => ({ type: 'task.updated' a
 function resetStore() {
   useDataStore.setState({
     tasks: [], workThreads: [], projects: [], sessions: [], agents: [], attention: [], queuedTasks: [], diagnostics: null,
-    websocket: 'disconnected', websocketUrl: null, websocketError: null, websocketCloseCode: null, websocketCloseReason: null,
+    websocket: 'disconnected', websocketUrl: null, websocketError: null, websocketCloseCode: null, websocketCloseReason: null, websocketReconnects: 0,
     lastSync: null, stale: false, offline: false, unreadAttention: 0, lastEventSequence: null, sequenceGap: false, refresh: mocks.refresh,
   });
 }
@@ -93,6 +93,30 @@ describe('normalizeCachedData', () => {
   it('preserves cached work threads from current cache data', () => {
     const workThreads = [{ root_task_id: 'task-1' }];
     expect(normalizeCachedData({ workThreads })).toMatchObject({ workThreads });
+  });
+});
+
+describe('offline queue reconciliation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetStore();
+  });
+
+  it('keeps a newly persisted queue entry visible when a cached project snapshot is followed by an unreachable API', async () => {
+    const queued = {
+      local_id: 'local-mobile-request-1', idempotency_key: 'mobile-request-1', request: { prompt: 'offline device queue task', project_id: 'project-1', priority: 'normal' as const, requires_approval: false },
+      state: 'retrying' as const, attempts: 1, created_at: '2026-07-21T12:00:00Z', next_attempt_at: '2026-07-21T12:00:02Z',
+    };
+    mocks.flushTaskQueue.mockResolvedValue([]);
+    mocks.loadTaskQueue.mockResolvedValue([queued]);
+    mocks.apiFetch.mockRejectedValue(new Error('network unavailable'));
+    mocks.getItem.mockResolvedValue(JSON.stringify({ projects: [project], queuedTasks: [] }));
+    useDataStore.setState({ refresh: useDataStore.getInitialState().refresh });
+
+    await useDataStore.getState().refresh();
+
+    expect(useDataStore.getState()).toMatchObject({ offline: true, projects: [project], queuedTasks: [queued] });
+    expect(mocks.loadTaskQueue).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -187,7 +211,7 @@ describe('live task reconciliation', () => {
     connection.socket.receive(snapshot(10, [task('task-1')]));
     connection.socket.closeWith();
 
-    expect(useDataStore.getState()).toMatchObject({ websocket: 'connecting', websocketCloseCode: 1006, websocketCloseReason: 'network lost' });
+    expect(useDataStore.getState()).toMatchObject({ websocket: 'connecting', websocketCloseCode: 1006, websocketCloseReason: 'network lost', websocketReconnects: 1 });
     vi.advanceTimersByTime(1000);
     expect(mocks.sockets).toHaveLength(2);
 
@@ -203,6 +227,41 @@ describe('live task reconciliation', () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
     expect(mocks.sockets).toHaveLength(2);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('accepts the replacement socket snapshot after an API sequence reset', () => {
+    const connection = connectSocket();
+    disconnect = connection.disconnect;
+    connection.socket.receive(snapshot(10, [task('before-restart', 'running')]));
+    connection.socket.closeWith(1012, 'service restart');
+    vi.advanceTimersByTime(1000);
+
+    const replacement = mocks.sockets[1];
+    replacement.open();
+    replacement.receive(snapshot(0, [task('after-restart', 'completed')]));
+
+    expect(useDataStore.getState()).toMatchObject({
+      websocket: 'connected', websocketReconnects: 1, tasks: [task('after-restart', 'completed')], lastEventSequence: 0, sequenceGap: false, stale: false,
+    });
+  });
+
+  it('ignores late callbacks from a replaced socket while accepting its successor', () => {
+    const connection = connectSocket();
+    disconnect = connection.disconnect;
+    connection.socket.receive(snapshot(10, [task('current', 'running')]));
+    connection.socket.closeWith();
+    vi.advanceTimersByTime(1000);
+
+    const replacement = mocks.sockets[1];
+    replacement.open();
+    replacement.receive(snapshot(11, [task('replacement', 'completed')]));
+    connection.socket.receive(snapshot(99, [task('stale-socket', 'failed')]));
+    connection.socket.closeWith(1006, 'late close');
+
+    expect(useDataStore.getState()).toMatchObject({
+      websocket: 'connected', websocketReconnects: 1, tasks: [task('replacement', 'completed')], lastEventSequence: 11,
+    });
+    expect(mocks.sockets).toHaveLength(2);
   });
 
   it('ignores out-of-order task updates and accepts newer state', () => {

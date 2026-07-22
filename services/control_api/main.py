@@ -170,6 +170,14 @@ def create_app() -> FastAPI:
     def health() -> dict[str, bool]:
         return {"ok": True}
 
+    @app.post("/__sandbox__/websocket-disconnect", dependencies=[Depends(require_auth)])
+    async def sandbox_websocket_disconnect() -> dict[str, int]:
+        # This deterministic physical-device hook is opt-in and is only set by
+        # scripts/device_sandbox.py. It is unavailable from normal deployments.
+        if os.getenv("CONTROL_API_DEVICE_SANDBOX") != "1":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+        return {"closed": await connections.close_all()}
+
     @app.get("/diagnostics", dependencies=[Depends(require_auth)])
     def diagnostics() -> dict[str, str]:
         plugin_socket = os.getenv("CONTROL_API_HERMES_PLUGIN_SOCKET")

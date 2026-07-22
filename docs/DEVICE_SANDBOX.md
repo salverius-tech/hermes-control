@@ -45,6 +45,28 @@ Before that flow, save these fixture-only settings in the installed app:
 
 The flow asserts stable Inbox section/thread selectors and the project detail order: attention, active, recent, sessions, then workspace/repository management.
 
+## P7.5 deterministic WebSocket reconnect slice
+
+With the same loopback server and reverse mapping, first establish the authenticated socket baseline:
+
+```bash
+maestro test \
+  -e DEVICE_TOKEN=sandbox-device-token \
+  .maestro/p7-websocket-connection.yaml
+```
+
+Then, while the app remains installed, use the marker-protected sandbox command to close only its current WebSocket clients. The API process, fixture data, and `adb reverse` mapping remain up:
+
+```bash
+python scripts/device_sandbox.py disconnect --root .device-sandbox --port 18787
+maestro test \
+  -e WEBSOCKET_STATE=connected \
+  -e WEBSOCKET_RECONNECTS=1 \
+  .maestro/p7-websocket-state.yaml
+```
+
+The second flow waits for the replacement connection and asserts the visible reconnect count. This avoids the prior timing-sensitive assertion of a transient `disconnected` frame. The fixture-only close route is authenticated and only enabled by `prepare`; the sandbox command calls it through fixed loopback `127.0.0.1`, and normal Control API deployments return `404`.
+
 ## P7.5 task-submission slice
 
 With the same loopback server and reverse mapping:

@@ -21,6 +21,7 @@ export default function NewTaskScreen() {
   const { apiUrl, apiToken } = useSettingsStore();
   const projects = useDataStore((state) => state.projects);
   const refreshData = useDataStore((state) => state.refresh);
+  const syncQueuedTasks = useDataStore((state) => state.syncQueuedTasks);
   const router = useRouter();
   const { projectId: projectParam } = useLocalSearchParams<{ projectId?: string }>();
   const insets = useSafeAreaInsets();
@@ -157,6 +158,7 @@ export default function NewTaskScreen() {
       if (!message.startsWith('API ')) {
         try {
           await enqueueTask(AsyncStorage, request, new Date(), idempotencyKey);
+          await syncQueuedTasks();
           setQueueNotice('API unavailable. Task saved locally and will retry when the connection returns.');
         } catch (queueError) {
           setSubmissionError(queueError instanceof Error ? queueError.message : 'Task submission failed');

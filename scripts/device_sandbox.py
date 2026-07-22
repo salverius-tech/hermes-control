@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from urllib.request import Request, urlopen
 from pathlib import Path
 
 # Running `python scripts/device_sandbox.py` makes Python put scripts/ on
@@ -214,6 +215,7 @@ def create_sandbox(root: Path) -> SandboxFixture:
         "CONTROL_API_PROJECT_ROOTS": str(root / "workspaces"),
         "CONTROL_API_ALLOW_SYNTHETIC_PROJECTS": "0",
         "CONTROL_API_RESUME_TASKS_ON_STARTUP": "0",
+        "CONTROL_API_DEVICE_SANDBOX": "1",
         # `CONTROL_API_HERMES_COMMAND` is tokenized with POSIX-style shlex by
         # the API. A Windows Python path plus a script argument can therefore
         # be mis-tokenized; cmd.exe is path-safe and exits successfully without
@@ -287,13 +289,29 @@ def serve_sandbox(root: Path, port: int) -> None:
     uvicorn.run("services.control_api.main:create_app", factory=True, host="127.0.0.1", port=port)
 
 
+def disconnect_websockets(root: Path, port: int) -> int:
+    """Request the fixture-only close hook without exposing it beyond loopback."""
+    if not 1 <= port <= 65535:
+        raise ValueError("Control API port must be in 1..65535")
+    fixture = load_sandbox(root)
+    request = Request(
+        f"http://127.0.0.1:{port}/__sandbox__/websocket-disconnect",
+        data=b"",
+        headers={"Authorization": f"Bearer {fixture.environment['CONTROL_API_TOKEN']}"},
+        method="POST",
+    )
+    with urlopen(request, timeout=5) as response:  # noqa: S310 - fixed loopback fixture URL.
+        payload = json.load(response)
+    return int(payload["closed"])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Prepare or remove a disposable local-only device fixture.")
     subcommands = parser.add_subparsers(dest="command", required=True)
-    for command in ("prepare", "destroy", "serve"):
+    for command in ("prepare", "destroy", "serve", "disconnect"):
         subparser = subcommands.add_parser(command)
         subparser.add_argument("--root", type=Path, required=True, help="new disposable sandbox directory")
-        if command == "serve":
+        if command in {"serve", "disconnect"}:
             subparser.add_argument("--port", type=int, default=8787)
     args = parser.parse_args()
     if args.command == "prepare":
@@ -301,6 +319,9 @@ def main() -> None:
         return
     if args.command == "serve":
         serve_sandbox(args.root, args.port)
+        return
+    if args.command == "disconnect":
+        print(json.dumps({"closed": disconnect_websockets(args.root, args.port)}))
         return
     destroy_sandbox(args.root)
     print(f"Removed disposable sandbox: {args.root.expanduser().resolve()}")

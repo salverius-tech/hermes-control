@@ -29,6 +29,7 @@ def test_create_sandbox_is_disposable_and_seeds_deterministic_populated_device_s
     assert fixture.environment["CONTROL_API_TOKEN"] == "sandbox-device-token"
     assert fixture.environment["CONTROL_API_HERMES_HOME"] == str(root / "hermes-home")
     assert fixture.environment["CONTROL_API_HERMES_COMMAND"] == "cmd.exe /c exit 0"
+    assert fixture.environment["CONTROL_API_DEVICE_SANDBOX"] == "1"
     assert (root / "fixture.json").is_file()
     assert fixture.maestro_env == {
         "PROJECT_ID": PROJECT_ID,

@@ -1,5 +1,6 @@
-# Assert the current real socket state after fixture lifecycle actions.
-# Start this flow only after p7-device-task.yaml saved fixture settings.
+# Assert the current real socket state after a fixture-controlled disconnect.
+# Start this flow only after p7-websocket-connection.yaml saved fixture settings,
+# then run `device_sandbox.py disconnect` against the same loopback server.
 appId: com.anonymous.hermesmobilecontrol
 ---
 - launchApp
@@ -8,4 +9,8 @@ appId: com.anonymous.hermesmobilecontrol
 - assertVisible: "Settings"
 - assertVisible: "Connection state"
 - assertVisible: "WebSocket"
-- assertVisible: ${WEBSOCKET_STATE}
+- assertVisible: "Reconnects"
+- extendedWaitUntil:
+    visible: ${WEBSOCKET_STATE}
+    timeout: 8000
+- assertVisible: ${WEBSOCKET_RECONNECTS}

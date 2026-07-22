@@ -31,6 +31,23 @@ def test_websocket_rejects_invalid_token(monkeypatch):
         assert exc.code == 1008
 
 
+def test_sandbox_disconnect_hook_is_opt_in_and_closes_connected_clients(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer dev-token"}
+
+    assert client.post("/__sandbox__/websocket-disconnect", headers=headers).status_code == 404
+
+    monkeypatch.setenv("CONTROL_API_DEVICE_SANDBOX", "1")
+    client = TestClient(create_app())
+    with client.websocket_connect("/ws/events?token=dev-token") as websocket:
+        assert websocket.receive_json()["type"] == "snapshot"
+        response = client.post("/__sandbox__/websocket-disconnect", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"closed": 1}
+
+
 def test_websocket_sends_initial_snapshot(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())

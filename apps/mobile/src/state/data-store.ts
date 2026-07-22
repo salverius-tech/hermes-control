@@ -31,18 +31,23 @@ export function normalizeCachedData(cached: unknown): Partial<DataState> {
 
 type DataState = {
   tasks: TaskSummary[]; workThreads: WorkThreadSummary[]; projects: ProjectSummary[]; sessions: SessionSummary[]; agents: AgentStatus[]; attention: TaskSummary[]; queuedTasks: QueuedTask[]; diagnostics: Diagnostics | null;
-  websocket: 'disconnected' | 'connecting' | 'connected'; websocketUrl: string | null; websocketError: string | null; websocketCloseCode: number | null; websocketCloseReason: string | null;
+  websocket: 'disconnected' | 'connecting' | 'connected'; websocketUrl: string | null; websocketError: string | null; websocketCloseCode: number | null; websocketCloseReason: string | null; websocketReconnects: number;
   lastSync: string | null; stale: boolean; offline: boolean; unreadAttention: number; lastEventSequence: number | null; sequenceGap: boolean;
-  refresh: () => Promise<void>; connect: () => () => void; markAttentionSeen: (taskId: string) => Promise<void>;
+  refresh: () => Promise<void>; syncQueuedTasks: () => Promise<QueuedTask[]>; connect: () => () => void; markAttentionSeen: (taskId: string) => Promise<void>;
 };
 
 export const useDataStore = create<DataState>((set, get) => ({
-  tasks: [], workThreads: [], projects: [], sessions: [], agents: [], attention: [], queuedTasks: [], diagnostics: null, websocket: 'disconnected', websocketUrl: null, websocketError: null, websocketCloseCode: null, websocketCloseReason: null, lastSync: null, stale: false, offline: false, unreadAttention: 0, lastEventSequence: null, sequenceGap: false,
+  tasks: [], workThreads: [], projects: [], sessions: [], agents: [], attention: [], queuedTasks: [], diagnostics: null, websocket: 'disconnected', websocketUrl: null, websocketError: null, websocketCloseCode: null, websocketCloseReason: null, websocketReconnects: 0, lastSync: null, stale: false, offline: false, unreadAttention: 0, lastEventSequence: null, sequenceGap: false,
+  async syncQueuedTasks() {
+    const queuedTasks = await loadTaskQueue(AsyncStorage);
+    set({ queuedTasks });
+    return queuedTasks;
+  },
   async refresh() {
     const { apiUrl, apiToken } = useSettingsStore.getState(); if (!apiToken) return;
     try {
       await flushTaskQueue(AsyncStorage, apiUrl, apiToken);
-      const queuedTasks = await loadTaskQueue(AsyncStorage);
+      const queuedTasks = await get().syncQueuedTasks();
       const [tasks, workThreads, projects, sessions, agents, diagnostics] = await Promise.all([
         apiFetch<TaskSummary[]>(apiUrl, apiToken, '/tasks?include_archived=true'), fetchWorkThreads(apiUrl, apiToken, { includeArchived: true }), apiFetch<ProjectSummary[]>(apiUrl, apiToken, '/projects'),
         apiFetch<SessionSummary[]>(apiUrl, apiToken, '/sessions'), apiFetch<AgentStatus[]>(apiUrl, apiToken, '/agents'), apiFetch<Diagnostics>(apiUrl, apiToken, '/diagnostics'),
@@ -51,7 +56,12 @@ export const useDataStore = create<DataState>((set, get) => ({
       const data = { tasks, workThreads, projects, sessions, agents, attention, queuedTasks, diagnostics, lastSync: new Date().toISOString(), stale: false, offline: false, unreadAttention: await unreadCount(tasks) };
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data)); set(data);
     } catch {
-      try { const cached = await AsyncStorage.getItem(CACHE_KEY); if (cached) set({ ...normalizeCachedData(JSON.parse(cached)), stale: true, offline: true }); else set({ stale: true, offline: true }); } catch { set({ stale: true, offline: true }); }
+      // Flush can update the durable queue even when the subsequent API snapshot
+      // cannot be loaded. Read it again so a stale cached snapshot never hides a
+      // newly queued offline submission.
+      let queuedTasks = get().queuedTasks;
+      try { queuedTasks = await get().syncQueuedTasks(); } catch { /* retain the last in-memory queue */ }
+      try { const cached = await AsyncStorage.getItem(CACHE_KEY); if (cached) set({ ...normalizeCachedData(JSON.parse(cached)), queuedTasks, stale: true, offline: true }); else set({ queuedTasks, stale: true, offline: true }); } catch { set({ queuedTasks, stale: true, offline: true }); }
     }
   },
   connect() {
@@ -61,6 +71,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconciliationTimer: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
+    let connectionEpoch = 0;
     const reconcile = () => {
       if (stopped || reconciliationTimer) return;
       reconciliationTimer = setTimeout(() => { reconciliationTimer = null; void get().refresh(); }, 250);
@@ -71,26 +82,49 @@ export const useDataStore = create<DataState>((set, get) => ({
       if (stopped || reconnectTimer) return;
       const delay = Math.min(30000, 1000 * 2 ** Math.min(attempts, 5));
       attempts += 1;
-      set({ websocket: 'connecting' });
+      set((state) => ({ websocket: 'connecting', websocketReconnects: state.websocketReconnects + 1 }));
       reconnectTimer = setTimeout(() => { reconnectTimer = null; open(); }, delay);
     };
     const open = () => {
       if (stopped) return;
+      const epoch = ++connectionEpoch;
+      let receivedSnapshot = false;
+      const isCurrent = () => !stopped && epoch === connectionEpoch;
       set({ websocket: 'connecting', websocketUrl, websocketError: null });
-      socket = createEventsSocket(apiUrl, apiToken);
-      socket.onopen = () => { attempts = 0; set({ websocket: 'connected', websocketError: null, offline: false }); void get().refresh(); };
-      socket.onclose = (event) => { set({ websocket: 'disconnected', websocketCloseCode: event.code, websocketCloseReason: event.reason || null }); scheduleReconnect(); };
-      socket.onerror = () => { set({ websocketError: 'WebSocket connection error' }); socket?.close(); };
-      socket.onmessage = (message) => {
+      const currentSocket = createEventsSocket(apiUrl, apiToken);
+      socket = currentSocket;
+      currentSocket.onopen = () => {
+        if (!isCurrent()) return;
+        attempts = 0;
+        set({ websocket: 'connected', websocketError: null, offline: false });
+        void get().refresh();
+      };
+      currentSocket.onclose = (event) => {
+        if (!isCurrent()) return;
+        set({ websocket: 'disconnected', websocketCloseCode: event.code, websocketCloseReason: event.reason || null });
+        scheduleReconnect();
+      };
+      currentSocket.onerror = () => {
+        if (!isCurrent()) return;
+        set({ websocketError: 'WebSocket connection error' });
+        currentSocket.close();
+      };
+      currentSocket.onmessage = (message) => {
+        if (!isCurrent()) return;
         const event = parseLiveEvent(typeof message.data === 'string' ? message.data : ''); if (!event) return;
         if (event.type === 'snapshot') {
           const lastEventSequence = get().lastEventSequence;
-          if (lastEventSequence !== null && event.seq <= lastEventSequence) return;
+          // A new socket's first snapshot is authoritative, even when the API
+          // restarted and its sequence counter is lower than the previous one.
+          // Later duplicate snapshots on that same socket remain stale.
+          if (receivedSnapshot && lastEventSequence !== null && event.seq <= lastEventSequence) return;
+          receivedSnapshot = true;
           const attention = attentionItems(event.tasks);
           set({ tasks: event.tasks, projects: event.projects, agents: event.agents, attention, stale: false, offline: false, lastSync: new Date().toISOString(), lastEventSequence: event.seq, sequenceGap: false });
           void unreadCount(event.tasks).then((unreadAttention) => set({ unreadAttention }));
           reconcile();
         } else {
+          if (!receivedSnapshot) return;
           const lastEventSequence = get().lastEventSequence;
           if (lastEventSequence !== null && event.seq <= lastEventSequence) return;
           const expected = lastEventSequence === null ? event.seq : lastEventSequence + 1;
@@ -102,8 +136,18 @@ export const useDataStore = create<DataState>((set, get) => ({
         }
       };
     };
+    set({ websocketReconnects: 0 });
     open();
-    return () => { stopped = true; if (reconnectTimer) clearTimeout(reconnectTimer); if (reconciliationTimer) clearTimeout(reconciliationTimer); reconnectTimer = null; reconciliationTimer = null; socket?.close(); };
+    return () => {
+      stopped = true;
+      connectionEpoch += 1;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (reconciliationTimer) clearTimeout(reconciliationTimer);
+      reconnectTimer = null;
+      reconciliationTimer = null;
+      socket?.close();
+      set({ websocket: 'disconnected' });
+    };
   },
   async markAttentionSeen(taskId) { const seen = await readSeen(); const item = get().attention.find((task) => task.task_id === taskId); if (item) seen[taskId] = item.updated_at; await AsyncStorage.setItem(ATTENTION_KEY, JSON.stringify(seen)); set({ unreadAttention: get().attention.filter((task) => seen[task.task_id] !== task.updated_at).length }); },
 }));

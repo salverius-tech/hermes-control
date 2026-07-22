@@ -8,4 +8,11 @@ describe('new-task Maestro project selector', () => {
 
     expect(source).toContain('testID={`new-task-project-${project.project_id}`}');
   });
+
+  it('synchronizes the displayed queue after persisting an unavailable submission', () => {
+    const source = readFileSync(join(process.cwd(), 'app', 'new-task.tsx'), 'utf8');
+
+    expect(source).toContain('const syncQueuedTasks = useDataStore((state) => state.syncQueuedTasks);');
+    expect(source).toContain('await enqueueTask(AsyncStorage, request, new Date(), idempotencyKey);\n          await syncQueuedTasks();');
+  });
 });
