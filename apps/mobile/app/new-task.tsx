@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { apiFetch, TaskSummary } from '@/api/client';
+import { apiFetch, ProjectSummary, TaskSummary } from '@/api/client';
 import { clearTaskDraft, loadTaskDraft, saveTaskDraft } from '@/features/tasks/draft';
 import { appendTranscript } from '@/features/tasks/prompt';
 import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/features/tasks/request';
@@ -236,9 +236,9 @@ export default function NewTaskScreen() {
       <ExpandableDetails initiallyExpanded label="Task options">
       <View style={styles.fieldGroup}>
         <Text style={styles.label}>Project</Text>
-        <Text style={styles.selectedProject}>{projects.find((project) => project.project_id === projectId)?.name || projectId}</Text>
+        <Text style={styles.selectedProject}>{selectedProjectLabel(projects, projectId)}</Text>
         <Text style={styles.help}>{projects.find((project) => project.project_id === projectId)?.primary_folder || 'Select an active Hermes project.'}</Text>
-        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable accessibilityRole="button" accessibilityState={{ selected: project.project_id === projectId }} key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]} testID={`new-task-project-${project.project_id}`}><Text style={styles.segmentText}>{project.name}</Text></Pressable>)}</View>
+        <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable accessibilityLabel={`${project.name}, ${project.project_id}`} accessibilityRole="button" accessibilityState={{ selected: project.project_id === projectId }} key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]} testID={`new-task-project-${project.project_id}`}><Text style={styles.segmentText}>{project.name}</Text><Text style={styles.projectChipId}>{project.project_id}</Text></Pressable>)}</View>
         {projects.length > 0 && projects.every((project) => project.archived) ? <Text style={styles.error}>All projects are archived. Restore one before creating work.</Text> : null}
       </View>
 
@@ -287,6 +287,11 @@ export default function NewTaskScreen() {
       <Text style={styles.help}>Use voice dictation or type directly. Voice transcription stays on-device/OS-level through the phone speech service.</Text>
     </ScrollView>
   );
+}
+
+function selectedProjectLabel(projects: ProjectSummary[], projectId: string): string {
+  const project = projects.find((item) => item.project_id === projectId);
+  return project ? `${project.name} · ${project.project_id}` : projectId;
 }
 
 const styles = StyleSheet.create({
@@ -417,6 +422,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   projectChip: { borderColor: colors.border, borderRadius: 999, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  projectChipId: { color: colors.muted, fontSize: 11, marginTop: 2, textAlign: 'center' },
   projectChipSelected: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   projectRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   selectedProject: { color: colors.text, fontSize: 17, fontWeight: '800' },

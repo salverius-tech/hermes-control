@@ -229,6 +229,22 @@ describe('live task reconciliation', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('clears the previous close diagnostic when a replacement socket connects', () => {
+    const connection = connectSocket();
+    disconnect = connection.disconnect;
+    connection.socket.closeWith();
+
+    vi.advanceTimersByTime(1000);
+    const replacement = mocks.sockets[1];
+    replacement.open();
+
+    expect(useDataStore.getState()).toMatchObject({
+      websocket: 'connected',
+      websocketCloseCode: null,
+      websocketCloseReason: null,
+    });
+  });
+
   it('accepts the replacement socket snapshot after an API sequence reset', () => {
     const connection = connectSocket();
     disconnect = connection.disconnect;
