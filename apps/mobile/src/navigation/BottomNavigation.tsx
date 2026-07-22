@@ -26,13 +26,16 @@ export function BottomNavigation() {
             <View key={item.label} style={styles.slot}>
               <Link href={item.href as Href} replace={item.replace} asChild>
                 <Pressable
+                  accessibilityLabel={item.badge === 'attention' && unreadAttention > 0 ? `${item.label}, ${unreadAttention} unread attention items` : item.label}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
                   testID={`nav-${item.label.toLowerCase()}`}
                   style={({ pressed }) => [styles.item, active && styles.activeItem, pressed && styles.pressed]}
                 >
                   <View style={styles.stack}>
                     <Feather color={active ? colors.text : colors.muted} name={item.iconName} size={28} style={styles.icon} />
                     <Text style={[styles.label, active && styles.activeText]}>{item.label}</Text>
-                    {item.label === 'Attention' && unreadAttention > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{unreadAttention > 9 ? '9+' : unreadAttention}</Text></View> : null}
+                    {item.badge === 'attention' && unreadAttention > 0 ? <View accessibilityLabel={`${unreadAttention} unread attention items`} style={styles.badge}><Text style={styles.badgeText}>{unreadAttention > 9 ? '9+' : unreadAttention}</Text></View> : null}
                   </View>
                 </Pressable>
               </Link>
@@ -92,12 +95,8 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   shell: {
-    bottom: 0,
-    left: 0,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    position: 'absolute',
-    right: 0,
   },
   slot: {
     flex: 1,

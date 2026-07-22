@@ -18,6 +18,10 @@ describe('navigationItems', () => {
   it('uses named vector icons instead of font glyphs', () => {
     expect(navigationItems.map((item) => item.iconName)).toEqual(['home', 'folder', 'plus-circle', 'list', 'bell']);
   });
+
+  it('assigns unread attention badges to the Inbox destination', () => {
+    expect(navigationItems.find((item) => item.href === '/')?.badge).toBe('attention');
+  });
 });
 
 describe('isActiveRoute', () => {

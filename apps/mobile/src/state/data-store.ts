@@ -96,7 +96,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       currentSocket.onopen = () => {
         if (!isCurrent()) return;
         attempts = 0;
-        set({ websocket: 'connected', websocketError: null, offline: false });
+        set({ websocket: 'connected', websocketError: null, websocketCloseCode: null, websocketCloseReason: null, offline: false });
         void get().refresh();
       };
       currentSocket.onclose = (event) => {

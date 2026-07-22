@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BottomNavigation } from '@/navigation/BottomNavigation';
@@ -38,28 +38,32 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.text,
-          headerTitleStyle: { fontWeight: '800' },
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.background },
-        }}
-      >
-        <Stack.Screen name="index" options={{ ...defaultScreenOptions, title: 'Hermes Control' }} />
-        <Stack.Screen name="tasks/index" options={{ ...defaultScreenOptions, title: 'Tasks' }} />
-        <Stack.Screen name="attention" options={{ ...defaultScreenOptions, title: 'Needs Attention' }} />
-        <Stack.Screen name="tasks/[taskId]" options={{ title: 'Task Detail' }} />
-        <Stack.Screen name="projects/index" options={{ ...defaultScreenOptions, title: 'Projects' }} />
-        <Stack.Screen name="projects/manage" options={{ title: 'Manage Project' }} />
-        <Stack.Screen name="projects/[projectId]" options={{ title: 'Project' }} />
-        <Stack.Screen name="new-task" options={{ ...defaultScreenOptions, title: 'New Task' }} />
-        <Stack.Screen name="more" options={{ ...defaultScreenOptions, title: 'More' }} />
-        <Stack.Screen name="recovery-plan" options={{ title: 'Recovery Plan' }} />
-        <Stack.Screen name="settings" options={{ headerBackVisible: false, headerRight: undefined, title: 'Settings' }} />
-      </Stack>
-      <BottomNavigation />
+      <View style={styles.root}>
+        <Stack
+          screenOptions={{
+            headerStyle: { backgroundColor: colors.background },
+            headerTintColor: colors.text,
+            headerTitleStyle: { fontWeight: '800' },
+            headerShadowVisible: false,
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        >
+          <Stack.Screen name="index" options={{ ...defaultScreenOptions, title: 'Hermes Control' }} />
+          <Stack.Screen name="tasks/index" options={{ ...defaultScreenOptions, title: 'Tasks' }} />
+          <Stack.Screen name="attention" options={{ ...defaultScreenOptions, title: 'Needs Attention' }} />
+          <Stack.Screen name="tasks/[taskId]" options={{ title: 'Task Detail' }} />
+          <Stack.Screen name="projects/index" options={{ ...defaultScreenOptions, title: 'Projects' }} />
+          <Stack.Screen name="projects/manage" options={{ title: 'Manage Project' }} />
+          <Stack.Screen name="projects/[projectId]" options={{ title: 'Project' }} />
+          <Stack.Screen name="new-task" options={{ ...defaultScreenOptions, title: 'New Task' }} />
+          <Stack.Screen name="more" options={{ ...defaultScreenOptions, title: 'More' }} />
+          <Stack.Screen name="recovery-plan" options={{ title: 'Recovery Plan' }} />
+          <Stack.Screen name="settings" options={{ headerBackVisible: false, headerRight: undefined, title: 'Settings' }} />
+        </Stack>
+        <BottomNavigation />
+      </View>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({ root: { flex: 1 } });
