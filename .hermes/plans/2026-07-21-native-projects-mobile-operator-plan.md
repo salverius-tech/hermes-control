@@ -200,10 +200,10 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 
 ## Phase 0 — Specification and safety baseline
 
-- [ ] **P0.1** Confirm the target Hermes profile/home and service account used by the deployed Control API.  
-  **Evidence:** redacted deployment configuration review; authenticated diagnostics shows profile integration readiness.
-- [ ] **P0.2** Audit live Hermes project/session schemas and map every existing `/projects`, `/sessions`, and task-submission route to its authoritative store.
-  **Evidence:** `docs/NATIVE_STORE_ROUTE_MAPPING.md` and the native-schema fixtures map repository behavior; no live native-store/profile audit was possible, so this task remains open.
+- [x] **P0.1** Confirm the target Hermes profile/home and service account used by the deployed Control API.
+  **Evidence:** redacted live environment review; authenticated diagnostics shows native-profile, workspace, bridge, and executor readiness.
+- [x] **P0.2** Audit live Hermes project/session schemas and map every existing `/projects`, `/sessions`, and task-submission route to its authoritative store.
+  **Evidence:** `docs/NATIVE_STORE_ROUTE_MAPPING.md`, native-schema fixtures, and a live authenticated route/schema audit.
 - [x] **P0.3** Define public API compatibility/migration behavior for synthetic task-derived project IDs.
   **Evidence:** `docs/API.md` and `docs/NATIVE_STORE_ROUTE_MAPPING.md` define strict-native rejection, development-only fixture mode, and client migration; `services/control_api/tests/test_native_project_integration.py` rejects legacy `default`, and `test_native_store_route_mapping_docs.py` guards the public contract.
 
@@ -314,7 +314,8 @@ A passing `/health` result must not be labelled as proof that Hermes execution i
 Add entries here only after running the command against the current relevant revision.
 
 | Date | Phase/task | Command or procedure | Result | Notes |
-|---|---|---|---|
+|---|---|---|---|---|
+| 2026-07-22 | P0.1, P0.2 | Redacted live environment review; authenticated local diagnostics and `/projects`, `/sessions`, `/tasks?include_archived=true` schema audit | passed | Live native home, managed workspace, bridge, executor, and native project readiness are true; API/bridge restarted on the deployed checkout. |
 | 2026-07-21 | P1.1–P1.5 | `.venv/bin/python -m pytest services/control_api/tests -q` | 95 passed | Native projection, strict production mode, task-context validation, and diagnostics coverage. |
 | 2026-07-21 | P1.1–P1.5 | `git diff --check` | passed | No whitespace errors. |
 | 2026-07-21 | P2.1, P2.4 (partial Phase 2) | `.venv/bin/python -m pytest services/control_api/tests -q` | 97 passed | Managed workspace configuration, manifest creation, collision handling, and native registration. |
