@@ -34,6 +34,28 @@ describe('fetchWorkThreads', () => {
     await expect(fetchWorkThreads('http://localhost:8787', 'test-token', { includeArchived: true, projectId: 'ops team' })).resolves.toEqual([workThread]);
     expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
   });
+
+  it('keeps filters when the React Native URLSearchParams polyfill has no size property', async () => {
+    const NativeURLSearchParams = globalThis.URLSearchParams;
+    class URLSearchParamsWithoutSize {
+      private readonly params = new NativeURLSearchParams();
+
+      set(key: string, value: string) { this.params.set(key, value); }
+      toString() { return this.params.toString(); }
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe('http://localhost:8787/work-threads?project_id=onramp');
+      return new Response(JSON.stringify([]), { status: 200 });
+    });
+    vi.stubGlobal('URLSearchParams', URLSearchParamsWithoutSize);
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(fetchWorkThreads('http://localhost:8787', 'test-token', { projectId: 'onramp' })).resolves.toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('apiFetch', () => {

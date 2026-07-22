@@ -192,7 +192,10 @@ export async function fetchWorkThreads(
   const query = new URLSearchParams();
   if (options.projectId) query.set('project_id', options.projectId);
   if (options.includeArchived) query.set('include_archived', 'true');
-  const suffix = query.size ? `?${query.toString()}` : '';
+  // React Native's URLSearchParams polyfill can omit the web-only `size` property.
+  // Use its serialized value so project filtering is preserved on device builds.
+  const serializedQuery = query.toString();
+  const suffix = serializedQuery ? `?${serializedQuery}` : '';
   return apiFetch<WorkThreadSummary[]>(apiUrl, apiToken, `/work-threads${suffix}`);
 }
 
