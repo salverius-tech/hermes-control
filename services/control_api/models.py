@@ -30,6 +30,8 @@ class TaskExecutionState(StrEnum):
 
 class TaskCreateRequest(BaseModel):
     prompt: str = Field(min_length=1)
+    provider: str | None = Field(default=None, min_length=1)
+    model: str | None = Field(default=None, min_length=1)
     project_id: str = "default"
     priority: Literal["low", "normal", "high"] = "normal"
     source: str = "mobile"
@@ -64,6 +66,8 @@ class TaskSummary(BaseModel):
     task_id: str
     title: str
     prompt: str
+    provider: str | None = None
+    model: str | None = None
     status: TaskStatus = TaskStatus.QUEUED
     project_id: str = "default"
     source: str = "mobile"

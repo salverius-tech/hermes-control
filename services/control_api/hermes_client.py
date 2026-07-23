@@ -71,7 +71,12 @@ class LocalHermesCommandExecutor:
         base_command = self.command
         if request.session_id and len(base_command) >= 2 and base_command[0] == "hermes" and base_command[1] == "chat":
             base_command = ("hermes", "chat", "--resume", request.session_id, *base_command[2:])
-        command = (*base_command, request.prompt) if query_mode else base_command
+        model_args: tuple[str, ...] = ()
+        if request.provider:
+            model_args += ("--provider", request.provider)
+        if request.model:
+            model_args += ("--model", request.model)
+        command = (*base_command, *model_args, request.prompt) if query_mode else (*base_command, *model_args)
         process = await asyncio.create_subprocess_exec(
             *command,
             stdin=asyncio.subprocess.DEVNULL if query_mode else asyncio.subprocess.PIPE,
@@ -184,6 +189,8 @@ class HermesPluginExecutor:
             request_id=request_id,
             prompt=request.prompt,
             project_id=request.project_id,
+            provider=request.provider,
+            model=request.model,
             priority=request.priority,
             source=request.source,
             requires_approval=request.requires_approval,

@@ -5,6 +5,8 @@ export const taskDraftStorageKey = 'tasks:new:draft';
 export type TaskDraft = {
   prompt: string;
   projectId: string;
+  provider?: string;
+  model?: string;
   priority: TaskPriority;
   requiresApproval: boolean;
 };
@@ -33,6 +35,8 @@ export async function loadTaskDraft(storage: TaskDraftStorage): Promise<TaskDraf
     return {
       prompt: parsed.prompt.trim(),
       projectId: typeof parsed.projectId === 'string' ? parsed.projectId.trim() || 'default' : 'default',
+      provider: typeof parsed.provider === 'string' ? parsed.provider.trim() : '',
+      model: typeof parsed.model === 'string' ? parsed.model.trim() : '',
       priority: parsed.priority,
       requiresApproval: parsed.requiresApproval === true,
     };
@@ -47,6 +51,8 @@ export async function saveTaskDraft(storage: TaskDraftStorage, draft: TaskDraft)
     JSON.stringify({
       prompt: draft.prompt.trim(),
       projectId: draft.projectId.trim() || 'default',
+      provider: draft.provider?.trim() || '',
+      model: draft.model?.trim() || '',
       priority: draft.priority,
       requiresApproval: draft.requiresApproval,
     }),

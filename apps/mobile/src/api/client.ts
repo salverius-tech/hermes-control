@@ -7,6 +7,8 @@ export type TaskSummary = {
   task_id: string;
   title: string;
   prompt: string;
+  provider?: string | null;
+  model?: string | null;
   status: TaskStatus;
   project_id: string;
   source: string;
@@ -26,6 +28,13 @@ export type TaskSummary = {
   session_id?: string | null;
   relation?: TaskRelation;
   execution_folder?: string | null;
+};
+
+export type ModelOption = {
+  provider: string;
+  provider_label: string;
+  model: string;
+  label: string;
 };
 
 export type TaskEvent = {
@@ -197,6 +206,10 @@ export async function fetchWorkThreads(
   const serializedQuery = query.toString();
   const suffix = serializedQuery ? `?${serializedQuery}` : '';
   return apiFetch<WorkThreadSummary[]>(apiUrl, apiToken, `/work-threads${suffix}`);
+}
+
+export async function fetchModels(apiUrl: string, apiToken: string): Promise<ModelOption[]> {
+  return apiFetch<ModelOption[]>(apiUrl, apiToken, '/models');
 }
 
 export async function fetchRecoveryPlan(apiUrl: string, apiToken: string): Promise<RecoveryPlan> {

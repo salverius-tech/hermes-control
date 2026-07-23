@@ -42,6 +42,8 @@ class TaskProjection:
             task_id=task_id,
             title=self._title_from_prompt(request.prompt),
             prompt=request.prompt,
+            provider=request.provider,
+            model=request.model,
             project_id=request.project_id,
             source=request.source,
             priority=request.priority,

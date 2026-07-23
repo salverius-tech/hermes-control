@@ -37,6 +37,7 @@ from .storage import SQLiteTaskStore
 from .websocket import ConnectionManager
 from .recovery_audit import RecoveryAuditStore
 from .workspace import HermesWorkspaceStore
+from .model_catalog import discover_models
 
 
 def create_app() -> FastAPI:
@@ -77,6 +78,8 @@ def create_app() -> FastAPI:
     def request_from_task(task: TaskSummary, *, requires_approval: bool | None = None, relation: Literal["retry", "edited_retry"] = "retry") -> TaskCreateRequest:
         return TaskCreateRequest(
             prompt=task.prompt,
+            provider=task.provider,
+            model=task.model,
             project_id=task.project_id,
             priority=task.priority,
             source=task.source,
@@ -207,6 +210,10 @@ def create_app() -> FastAPI:
             "active_task_count": str(task_service.active_task_count),
         }
 
+    @app.get("/models", dependencies=[Depends(require_auth)])
+    def list_models() -> list[dict[str, str]]:
+        return discover_models()
+
     @app.get("/tasks", dependencies=[Depends(require_auth)])
     def list_tasks(include_archived: bool = False) -> list[TaskSummary]:
         return projection.list_tasks(include_archived=include_archived)
@@ -310,6 +317,8 @@ def create_app() -> FastAPI:
             root_task_id=original.root_task_id or original.task_id,
             session_id=original.session_id,
             relation=request.relation,
+            provider=original.provider,
+            model=original.model,
         )
         return await submit_linked_task(task_request, idempotency_key=idempotency_key)
 
@@ -328,6 +337,8 @@ def create_app() -> FastAPI:
             parent_task_id=original.task_id,
             root_task_id=original.root_task_id or original.task_id,
             relation="edited_retry",
+            provider=original.provider,
+            model=original.model,
         )
         return await submit_linked_task(task_request, idempotency_key=idempotency_key)
 
@@ -346,6 +357,8 @@ def create_app() -> FastAPI:
             parent_task_id=original.task_id,
             root_task_id=original.root_task_id or original.task_id,
             relation="retry",
+            provider=original.provider,
+            model=original.model,
         )
         return await submit_linked_task(task_request, idempotency_key=idempotency_key)
 

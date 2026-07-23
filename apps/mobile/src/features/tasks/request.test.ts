@@ -10,12 +10,16 @@ describe('buildTaskCreateRequest', () => {
         projectId: '  local  ',
         priority: 'high',
         requiresApproval: true,
+      provider: 'openrouter',
+      model: '  anthropic/claude-sonnet-4  ',
       }),
     ).toEqual({
       prompt: 'Check Hermes status',
       project_id: 'local',
       priority: 'high',
       requires_approval: true,
+      provider: 'openrouter',
+      model: 'anthropic/claude-sonnet-4',
     });
   });
 

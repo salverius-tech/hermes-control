@@ -30,6 +30,17 @@ def test_plugin_request_round_trip_preserves_auth_token():
     assert PluginRequest.from_message(request.to_message()) == request
 
 
+def test_plugin_request_round_trip_preserves_selected_model():
+    message = valid_message()
+    message["task"].update(provider="openrouter", model="anthropic/claude-sonnet-4")
+
+    request = PluginRequest.from_message(message)
+
+    assert request.provider == "openrouter"
+    assert request.model == "anthropic/claude-sonnet-4"
+    assert PluginRequest.from_message(request.to_message()) == request
+
+
 @pytest.mark.parametrize(
     "mutate, error",
     [

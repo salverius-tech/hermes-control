@@ -252,6 +252,7 @@ export default function TaskDetailScreen() {
           <ExpandableDetails label="Task context">
             <Text style={styles.bodyText}>{task.prompt}</Text>
             <MetadataRow label="Relation" value={task.relation || 'original'} />
+            <MetadataRow label="Model" value={task.model ? `${task.provider || 'Hermes'} · ${task.model}` : 'Hermes configured default'} />
             <MetadataRow label="Execution folder" value={task.execution_folder} />
             <MetadataRow label="Session" value={task.session_id} />
           </ExpandableDetails>

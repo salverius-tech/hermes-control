@@ -27,6 +27,46 @@ def test_create_task_returns_generated_task_summary(monkeypatch):
     assert body["source"] == "mobile"
 
 
+def test_create_task_accepts_selected_hermes_model(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/tasks",
+        headers={"Authorization": "Bearer dev-token"},
+        json={
+            "prompt": "Use the selected model",
+            "provider": "openrouter",
+            "model": "anthropic/claude-sonnet-4",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["provider"] == "openrouter"
+    assert response.json()["model"] == "anthropic/claude-sonnet-4"
+
+
+def test_models_endpoint_returns_discovered_models(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    monkeypatch.setattr(
+        "services.control_api.main.discover_models",
+        lambda: [
+            {
+                "provider": "openrouter",
+                "provider_label": "OpenRouter",
+                "model": "anthropic/claude-sonnet-4",
+                "label": "Claude Sonnet 4",
+            }
+        ],
+    )
+    client = TestClient(create_app())
+
+    response = client.get("/models", headers={"Authorization": "Bearer dev-token"})
+
+    assert response.status_code == 200
+    assert response.json()[0]["model"] == "anthropic/claude-sonnet-4"
+
+
 def test_create_task_rejects_blank_prompt(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())

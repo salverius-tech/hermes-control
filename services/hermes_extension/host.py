@@ -19,7 +19,12 @@ def build_command(command: tuple[str, ...], request: PluginRequest) -> tuple[tup
     base_command = command
     if request.session_id and len(base_command) >= 2 and base_command[0] == "hermes" and base_command[1] == "chat":
         base_command = ("hermes", "chat", "--resume", request.session_id, *base_command[2:])
-    return ((*base_command, request.prompt) if query_mode else base_command, query_mode)
+    model_args: tuple[str, ...] = ()
+    if request.provider:
+        model_args += ("--provider", request.provider)
+    if request.model:
+        model_args += ("--model", request.model)
+    return ((*base_command, *model_args, request.prompt) if query_mode else (*base_command, *model_args), query_mode)
 
 
 @dataclass

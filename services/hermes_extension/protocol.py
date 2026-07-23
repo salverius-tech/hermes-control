@@ -17,6 +17,8 @@ class PluginRequest:
     priority: str
     source: str
     requires_approval: bool
+    provider: str | None = None
+    model: str | None = None
     session_id: str | None = None
     execution_folder: str | None = None
     auth_token: str | None = None
@@ -34,6 +36,10 @@ class PluginRequest:
                 "requires_approval": self.requires_approval,
             },
         }
+        if self.provider is not None:
+            message["task"]["provider"] = self.provider
+        if self.model is not None:
+            message["task"]["model"] = self.model
         if self.session_id is not None:
             message["task"]["session_id"] = self.session_id
         if self.execution_folder is not None:
@@ -62,10 +68,16 @@ class PluginRequest:
         if not isinstance(task["requires_approval"], bool):
             raise ValueError("task.submit requires_approval must be boolean")
         auth_token = message.get("auth_token")
+        provider = task.get("provider")
+        model = task.get("model")
         session_id = task.get("session_id")
         execution_folder = task.get("execution_folder")
         if session_id is not None and not isinstance(session_id, str):
             raise ValueError("task.submit session_id is invalid")
+        if provider is not None and (not isinstance(provider, str) or not provider.strip()):
+            raise ValueError("task.submit provider is invalid")
+        if model is not None and (not isinstance(model, str) or not model.strip()):
+            raise ValueError("task.submit model is invalid")
         if execution_folder is not None and not isinstance(execution_folder, str):
             raise ValueError("task.submit execution_folder is invalid")
         if auth_token is not None and not isinstance(auth_token, str):
@@ -77,6 +89,8 @@ class PluginRequest:
             priority=task["priority"],
             source=task["source"],
             requires_approval=task["requires_approval"],
+            provider=provider,
+            model=model,
             session_id=session_id,
             execution_folder=execution_folder,
             auth_token=auth_token,
