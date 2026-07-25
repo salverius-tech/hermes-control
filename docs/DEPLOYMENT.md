@@ -179,13 +179,19 @@ curl -fsS https://control-api.example.ts.net/health
 curl -fsS -H "Authorization: Bearer $TOKEN" https://control-api.example.ts.net/diagnostics
 ```
 
-Create a real task through Caddy:
+List the registered native projects and choose the project ID for the task:
+
+```bash
+curl -fsS -H "Authorization: Bearer $TOKEN" https://control-api.example.ts.net/projects
+```
+
+Create a real task through Caddy. Replace `<project-id>` with an ID returned by `/projects`; native-project mode does not accept the legacy `default` project ID:
 
 ```bash
 curl -fsS -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"prompt":"Report Hermes status from the Control API deployment"}' \
+  -d '{"prompt":"Report Hermes status from the Control API deployment","project_id":"<project-id>"}' \
   https://control-api.example.ts.net/tasks
 ```
 
