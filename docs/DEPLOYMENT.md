@@ -46,6 +46,12 @@ sudo -u hermes .venv/bin/python -m pip install --upgrade pip
 sudo -u hermes .venv/bin/python -m pip install -r requirements.txt
 ```
 
+The API virtual environment must contain `hermes-agent`, not only the
+standalone `hermes` executable. The Control API imports Hermes' model catalog
+to serve `/models`; installing `requirements.txt` places the matching package
+in the API environment and keeps model discovery reproducible after a clean
+deployment.
+
 For an update after the first install:
 
 ```bash
