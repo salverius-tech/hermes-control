@@ -120,6 +120,30 @@ async def test_subprocess_handler_completes_on_hermes_session_footer():
 
 
 @pytest.mark.anyio
+async def test_subprocess_handler_suppresses_cleanup_traceback_after_session_footer():
+    handler = SubprocessHermesTaskHandler(
+        (
+            sys.executable,
+            "-u",
+            "-c",
+            "import sys; print('result', flush=True); print('Session: test', flush=True); print('Traceback (most recent call last):'); print('KeyboardInterrupt')",
+        )
+    )
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    result = await handler.run(
+        PluginRequest("req-footer-cleanup", "inspect", "default", "normal", "mobile", False),
+        emit=emit,
+    )
+
+    assert result == "result\nSession: test"
+    assert [event.message for event in events] == ["result", "Session: test"]
+
+
+@pytest.mark.anyio
 async def test_subprocess_handler_suppresses_interpreter_shutdown_traceback_from_progress():
     handler = SubprocessHermesTaskHandler(
         (

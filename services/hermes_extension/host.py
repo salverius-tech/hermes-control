@@ -69,21 +69,30 @@ class SubprocessHermesTaskHandler:
             process.stdin.close()
 
         completion_event = asyncio.Event()
+        cleanup_candidate: list[str] = []
+        shutdown_noise = False
         started_at = time.monotonic()
 
         async def read_stream(stream: asyncio.StreamReader, *, is_stdout: bool = False) -> list[str]:
+            nonlocal shutdown_noise
             lines: list[str] = []
             suppress_shutdown_noise = False
             async for raw_line in stream:
                 line = raw_line.decode(errors="replace").strip()
                 if line:
+                    if completion_event.is_set():
+                        continue
+                    if not is_stdout and (cleanup_candidate or line == "Traceback (most recent call last):"):
+                        cleanup_candidate.append(line)
+                        continue
                     lines.append(line)
+                    if line.startswith("Session:"):
+                        completion_event.set()
                     if line == "Exception ignored on threading shutdown:":
                         suppress_shutdown_noise = True
+                        shutdown_noise = True
                     if not suppress_shutdown_noise:
                         await emit(PluginEvent(event_type="progress", request_id=request.request_id, message=line))
-                    if is_stdout and line.startswith("Session:"):
-                        completion_event.set()
             return lines
 
         stdout_task = asyncio.create_task(read_stream(process.stdout, is_stdout=True))
@@ -130,6 +139,11 @@ class SubprocessHermesTaskHandler:
                     process.kill()
                     await process_wait_task
             stdout_lines, stderr_lines = await asyncio.gather(stdout_task, stderr_task)
+            if not completed_from_footer:
+                stderr_lines.extend(cleanup_candidate)
+                if not shutdown_noise:
+                    for line in cleanup_candidate:
+                        await emit(PluginEvent(event_type="progress", request_id=request.request_id, message=line))
         except BaseException:
             if process.returncode is None:
                 process.kill()
