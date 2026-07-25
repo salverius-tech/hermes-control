@@ -67,6 +67,18 @@ def create_app() -> FastAPI:
     task_rate_limiter = RateLimiter(int(os.getenv("CONTROL_API_RATE_LIMIT_PER_MINUTE", "60")))
     connections = ConnectionManager()
 
+    def require_task_approval(request: TaskCreateRequest) -> TaskCreateRequest:
+        """Apply the deployment-wide execution gate at every submission path.
+
+        Client defaults are not an authority boundary: retries and other linked
+        task routes can construct a new request without passing through the
+        mobile create form. When enabled, this policy keeps every task in the
+        approval state until the authenticated approval route is used.
+        """
+        if os.getenv("CONTROL_API_REQUIRE_TASK_APPROVAL") == "1":
+            return request.model_copy(update={"requires_approval": True})
+        return request
+
     def enforce_task_rate_limit(request: Request) -> None:
         client = request.client.host if request.client is not None else "unknown"
         if not task_rate_limiter.allow(client):
@@ -162,6 +174,7 @@ def create_app() -> FastAPI:
             if existing is not None:
                 return existing
             request = request.model_copy(update={"idempotency_key": idempotency_key})
+        request = require_task_approval(request)
         request = resolve_project_context(request)
         task = await task_service.submit_task(request, on_update=broadcast_task_update)
         await connections.broadcast_task_created(task)
@@ -225,6 +238,7 @@ def create_app() -> FastAPI:
             if existing is not None:
                 return existing
             request = request.model_copy(update={"idempotency_key": idempotency_key})
+        request = require_task_approval(request)
         request = resolve_project_context(request)
         task = await task_service.submit_task(request, on_update=broadcast_task_update)
         await connections.broadcast_task_created(task)

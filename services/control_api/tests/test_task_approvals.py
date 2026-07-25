@@ -29,6 +29,53 @@ def test_create_task_can_require_approval_before_execution(monkeypatch):
     assert [event["event_type"] for event in events] == ["task.created", "task.approval_requested"]
 
 
+def test_deployment_policy_requires_approval_even_when_client_disables_it(monkeypatch):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    monkeypatch.setenv("CONTROL_API_REQUIRE_TASK_APPROVAL", "1")
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "Run without approval", "requires_approval": False},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "awaiting_approval"
+    assert response.json()["requires_approval"] is True
+
+
+@pytest.mark.parametrize(
+    ("route_suffix", "payload"),
+    [
+        ("retry", None),
+        ("continue", {"prompt": "Continue without approval", "requires_approval": False}),
+        ("edit-retry", {"prompt": "Retry without approval", "requires_approval": False}),
+        ("new-session", {"prompt": "New session without approval", "requires_approval": False}),
+    ],
+)
+def test_deployment_policy_requires_approval_for_every_recovery_path(monkeypatch, route_suffix, payload):
+    monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
+    monkeypatch.setenv("CONTROL_API_REQUIRE_TASK_APPROVAL", "1")
+    client = TestClient(create_app())
+    original = client.post(
+        "/tasks",
+        headers=auth_headers(),
+        json={"prompt": "Original approved task", "session_id": "session-policy", "requires_approval": True},
+    ).json()
+    assert client.post(f"/tasks/{original['task_id']}/cancel", headers=auth_headers()).status_code == 200
+
+    response = client.post(
+        f"/tasks/{original['task_id']}/{route_suffix}",
+        headers=auth_headers(),
+        json=payload,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "awaiting_approval"
+    assert response.json()["requires_approval"] is True
+
+
 def test_approve_task_moves_approval_required_task_to_queue(monkeypatch):
     monkeypatch.setenv("CONTROL_API_TOKEN", "dev-token")
     client = TestClient(create_app())

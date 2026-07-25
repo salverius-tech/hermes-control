@@ -88,6 +88,8 @@ CONTROL_API_TOKEN=<generated-token>
 CONTROL_API_DB_PATH=/var/lib/hermes-mobile-control/control-api.db
 CONTROL_API_HERMES_PLUGIN_SOCKET=/run/hermes/control-extension.sock
 CONTROL_API_HERMES_PLUGIN_TOKEN=<local-bridge-token>
+# Enforce explicit task approval in this infrastructure deployment.
+CONTROL_API_REQUIRE_TASK_APPROVAL=1
 HERMES_CONTROL_EXTENSION_SOCKET=/run/hermes/control-extension.sock
 HERMES_CONTROL_EXTENSION_TOKEN=<same-local-bridge-token>
 HERMES_CONTROL_EXTENSION_HERMES_COMMAND="/absolute/path/to/hermes chat --ignore-user-config --ignore-rules -q"
