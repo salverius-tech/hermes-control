@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { apiFetch, applyRecoveryPlan, createProject, fetchRecoveryPlan, fetchWorkThreads, testConnection } from './client';
+import { apiFetch, applyRecoveryPlan, createProject, fetchModels, fetchRecoveryPlan, fetchWorkThreads, testConnection } from './client';
 
 const workThread = {
   attempts: [],
@@ -55,6 +55,20 @@ describe('fetchWorkThreads', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('fetchModels', () => {
+  it('fetches the authenticated Hermes model catalog', async () => {
+    const models = [{ provider: 'openrouter', provider_label: 'OpenRouter', model: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' }];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('http://localhost:8787/models');
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer test-token' });
+      return new Response(JSON.stringify(models), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchModels('http://localhost:8787', 'test-token')).resolves.toEqual(models);
   });
 });
 

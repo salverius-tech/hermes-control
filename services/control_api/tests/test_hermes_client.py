@@ -191,6 +191,42 @@ async def test_local_command_executor_passes_query_prompt_as_argument():
 
 
 @pytest.mark.anyio
+async def test_local_command_executor_passes_selected_provider_and_model(monkeypatch):
+    captured = {}
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdout = asyncio.StreamReader()
+            self.stderr = asyncio.StreamReader()
+            self.stdout.feed_data(b"completed\n")
+            self.stdout.feed_eof()
+            self.stderr.feed_eof()
+            self.stdin = None
+            self.returncode = 0
+
+        async def wait(self) -> None:
+            return None
+
+    async def create_subprocess_exec(*command, **kwargs):
+        captured["command"] = command
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
+    executor = LocalHermesCommandExecutor(("hermes", "chat", "-q"))
+    await executor.run(
+        TaskCreateRequest(
+            prompt="use model",
+            provider="openrouter",
+            model="anthropic/claude-sonnet-4",
+        )
+    )
+
+    assert captured["command"] == (
+        "hermes", "chat", "-q", "--provider", "openrouter", "--model", "anthropic/claude-sonnet-4", "use model"
+    )
+
+
+@pytest.mark.anyio
 async def test_local_command_executor_resumes_native_session_before_query_arguments(monkeypatch):
     captured = {}
 

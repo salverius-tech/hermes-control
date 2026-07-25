@@ -31,6 +31,8 @@ describe('task draft persistence', () => {
     await saveTaskDraft(storage, {
       prompt: '  summarize the repo  ',
       projectId: '  mobile  ',
+      provider: 'openrouter',
+      model: 'anthropic/claude-sonnet-4',
       priority: 'high',
       requiresApproval: true,
     });
@@ -38,6 +40,8 @@ describe('task draft persistence', () => {
     await expect(loadTaskDraft(storage)).resolves.toEqual({
       prompt: 'summarize the repo',
       projectId: 'mobile',
+      provider: 'openrouter',
+      model: 'anthropic/claude-sonnet-4',
       priority: 'high',
       requiresApproval: true,
     });

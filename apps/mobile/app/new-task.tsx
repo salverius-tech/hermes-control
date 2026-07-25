@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { apiFetch, ProjectSummary, TaskSummary } from '@/api/client';
+import { apiFetch, fetchModels, ModelOption, ProjectSummary, TaskSummary } from '@/api/client';
 import { clearTaskDraft, loadTaskDraft, saveTaskDraft } from '@/features/tasks/draft';
 import { appendTranscript } from '@/features/tasks/prompt';
 import { buildTaskCreateRequest, priorityOptions, type TaskPriority } from '@/features/tasks/request';
@@ -28,6 +28,11 @@ export default function NewTaskScreen() {
   const insets = useSafeAreaInsets();
   const [prompt, setPrompt] = useState('');
   const [projectId, setProjectId] = useState('default');
+  const [provider, setProvider] = useState('');
+  const [model, setModel] = useState('');
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>('normal');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [partialTranscript, setPartialTranscript] = useState('');
@@ -42,6 +47,12 @@ export default function NewTaskScreen() {
   useEffect(() => {
     if (!apiToken) return;
     void refreshData();
+    void fetchModels(apiUrl, apiToken).then((options) => {
+      setModelOptions(options);
+      setModelError(null);
+      setModel((current) => current || options[0]?.model || '');
+      setProvider((current) => current || options[0]?.provider || '');
+    }).catch((err) => setModelError(err instanceof Error ? err.message : 'Model list unavailable'));
     void flushTaskQueue(AsyncStorage, apiUrl, apiToken).then((submitted) => {
       if (submitted.length > 0) setQueueNotice(`${submitted.length} queued task${submitted.length === 1 ? '' : 's'} submitted.`);
     });
@@ -63,6 +74,8 @@ export default function NewTaskScreen() {
         if (!mounted || draft === null) return;
         setPrompt(draft.prompt);
         setProjectId(explicitProjectId || draft.projectId);
+        setProvider(draft.provider || '');
+        setModel(draft.model || '');
         setPriority(draft.priority);
         setRequiresApproval(draft.requiresApproval);
       })
@@ -80,8 +93,8 @@ export default function NewTaskScreen() {
       skipNextDraftSave.current = false;
       return;
     }
-    void saveTaskDraft(AsyncStorage, { prompt, projectId, priority, requiresApproval });
-  }, [draftLoaded, priority, projectId, prompt, requiresApproval]);
+    void saveTaskDraft(AsyncStorage, { prompt, projectId, provider, model, priority, requiresApproval });
+  }, [draftLoaded, model, priority, projectId, prompt, provider, requiresApproval]);
 
   useSpeechRecognitionEvent('start', () => {
     setVoiceError(null);
@@ -141,7 +154,7 @@ export default function NewTaskScreen() {
 
   async function submit() {
     if (!prompt.trim()) return;
-    const request = buildTaskCreateRequest({ prompt, projectId, priority, requiresApproval });
+    const request = buildTaskCreateRequest({ prompt, projectId, provider, model, priority, requiresApproval });
     const idempotencyKey = `mobile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
       setSubmitting(true); setSubmissionError(null);
@@ -156,6 +169,8 @@ export default function NewTaskScreen() {
       skipNextDraftSave.current = true;
       setPrompt('');
       setProjectId(request.project_id);
+      setProvider(request.provider || '');
+      setModel(request.model || '');
       setRequiresApproval(false);
       router.replace(`/tasks/${task.task_id}`);
     } catch (err) {
@@ -240,6 +255,32 @@ export default function NewTaskScreen() {
         <Text style={styles.help}>{projects.find((project) => project.project_id === projectId)?.primary_folder || 'Select an active Hermes project.'}</Text>
         <View style={styles.projectRow}>{projects.filter((project) => !project.archived).map((project) => <Pressable accessibilityLabel={`${project.name}, ${project.project_id}`} accessibilityRole="button" accessibilityState={{ selected: project.project_id === projectId }} key={project.project_id} onPress={() => setProjectId(project.project_id)} style={[styles.projectChip, project.project_id === projectId && styles.projectChipSelected]} testID={`new-task-project-${project.project_id}`}><Text style={styles.segmentText}>{project.name}</Text><Text style={styles.projectChipId}>{project.project_id}</Text></Pressable>)}</View>
         {projects.length > 0 && projects.every((project) => project.archived) ? <Text style={styles.error}>All projects are archived. Restore one before creating work.</Text> : null}
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Model</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: modelMenuOpen }}
+          onPress={() => setModelMenuOpen((open) => !open)}
+          style={styles.modelSelector}
+          testID="new-task-model-selector"
+        >
+          <Text style={styles.selectedProject}>{modelOptions.find((option) => option.model === model)?.label || model || 'Use Hermes default model'}</Text>
+          <Text style={styles.help}>{modelOptions.find((option) => option.model === model)?.provider_label || provider || 'No model selected'}</Text>
+        </Pressable>
+        {modelMenuOpen ? <View style={styles.modelMenu}>
+          {modelOptions.map((option) => <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: option.model === model && option.provider === provider }}
+            key={`${option.provider}:${option.model}`}
+            onPress={() => { setProvider(option.provider); setModel(option.model); setModelMenuOpen(false); }}
+            style={[styles.modelOption, option.model === model && option.provider === provider && styles.modelOptionSelected]}
+            testID={`new-task-model-${option.provider}-${option.model}`}
+          ><Text style={styles.segmentText}>{option.label}</Text><Text style={styles.help}>{option.provider_label} · {option.model}</Text></Pressable>)}
+          {modelOptions.length === 0 ? <Text style={styles.help}>No configured Hermes models were returned.</Text> : null}
+        </View> : null}
+        {modelError ? <Text style={styles.help}>Model list unavailable; Hermes will use its configured default.</Text> : null}
       </View>
 
       <View style={styles.fieldGroup}>
@@ -376,6 +417,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  modelMenu: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: spacing.xs, padding: spacing.xs },
+  modelOption: { borderRadius: 10, gap: spacing.xs, padding: spacing.sm },
+  modelOptionSelected: { backgroundColor: colors.primarySoft },
+  modelSelector: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: spacing.xs, padding: spacing.md },
   partial: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
