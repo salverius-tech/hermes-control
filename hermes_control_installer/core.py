@@ -1,7 +1,22 @@
 from __future__ import annotations
 
+import getpass
 import os
-import pwd
+try:
+    import pwd
+except ImportError:  # pragma: no cover - exercised by Windows CI
+    from types import SimpleNamespace
+
+    class _PwdCompat:
+        @staticmethod
+        def getpwuid(_uid):
+            return SimpleNamespace(pw_name=getpass.getuser(), pw_dir=str(Path.home()), pw_gid=-1)
+
+        @staticmethod
+        def getpwnam(user):
+            return SimpleNamespace(pw_name=user, pw_dir=str(Path.home() / user), pw_gid=-1)
+
+    pwd = _PwdCompat()
 import secrets
 import shutil
 import subprocess

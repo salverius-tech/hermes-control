@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import getpass
 import json
 import os
-import pwd
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -39,7 +39,7 @@ pytestmark = pytest.mark.unit
 def config(tmp_path: Path) -> InstallConfig:
     return InstallConfig(
         root=tmp_path,
-        hermes_user=pwd.getpwuid(os.getuid()).pw_name,
+        hermes_user=getpass.getuser(),
         install_dir=tmp_path / "install",
         config_dir=tmp_path / "etc",
         state_dir=tmp_path / "state",
