@@ -24,7 +24,18 @@ def build_command(command: tuple[str, ...], request: PluginRequest) -> tuple[tup
         model_args += ("--provider", request.provider)
     if request.model:
         model_args += ("--model", request.model)
-    return ((*base_command, *model_args, request.prompt) if query_mode else (*base_command, *model_args), query_mode)
+    if query_mode:
+        query_command: list[str] = []
+        query_inserted = False
+        for argument in base_command:
+            query_command.append(argument)
+            if argument in {"-q", "--query"}:
+                query_command.append(request.prompt)
+                query_inserted = True
+        if not query_inserted:
+            query_command.append(request.prompt)
+        return (*query_command, *model_args), True
+    return (*base_command, *model_args), False
 
 
 @dataclass

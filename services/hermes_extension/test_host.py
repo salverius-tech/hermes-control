@@ -86,6 +86,36 @@ def test_build_command_places_resume_before_query_and_preserves_prompt():
     )
 
 
+def test_build_command_places_query_before_model_options():
+    command, query_mode = build_command(
+        ("hermes", "chat", "--ignore-user-config", "--ignore-rules", "-q"),
+        PluginRequest(
+            "req-query-order",
+            "inspect punctuation: ;()",
+            "default",
+            "normal",
+            "mobile",
+            False,
+            provider="openai-codex",
+            model="gpt-5.6-luna",
+        ),
+    )
+
+    assert query_mode is True
+    assert command == (
+        "hermes",
+        "chat",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "-q",
+        "inspect punctuation: ;()",
+        "--provider",
+        "openai-codex",
+        "--model",
+        "gpt-5.6-luna",
+    )
+
+
 def test_build_command_uses_stdin_for_non_query_commands():
     command, query_mode = build_command(
         ("hermes", "chat"),
