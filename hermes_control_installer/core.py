@@ -54,13 +54,17 @@ def run_command(command: Sequence[str], *, user: str | None = None) -> CommandRe
     return CommandResult(completed.returncode, completed.stdout.strip(), completed.stderr.strip())
 
 
+def _git_command(root: Path, *arguments: str) -> list[str]:
+    return ["git", "-c", f"safe.directory={root}", "-C", str(root), *arguments]
+
+
 def git_revision(root: Path, ref: str = "HEAD") -> str | None:
-    result = run_command(["git", "-C", str(root), "rev-parse", "--verify", f"{ref}^{{commit}}"])
+    result = run_command(_git_command(root, "rev-parse", "--verify", f"{ref}^{{commit}}"))
     return result.stdout if result.returncode == 0 and result.stdout else None
 
 
 def git_is_clean(root: Path) -> bool:
-    result = run_command(["git", "-C", str(root), "status", "--porcelain"])
+    result = run_command(_git_command(root, "status", "--porcelain"))
     return result.returncode == 0 and not result.stdout
 
 
@@ -84,7 +88,7 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False) ->
     current = git_revision(config.root)
     target = git_revision(config.root, ref)
     if target is None:
-        fetched = run_command(["git", "-C", str(config.root), "fetch", "--ff-only", "origin", ref])
+        fetched = run_command(_git_command(config.root, "fetch", "--ff-only", "origin", ref))
         if fetched.returncode:
             print("FAIL update: reviewed ref is unavailable")
             return 2
@@ -97,7 +101,7 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False) ->
     if dry_run:
         print("DRY-RUN update: no checkout or service mutation performed")
         return 0
-    checkout = run_command(["git", "-C", str(config.root), "checkout", "--detach", target])
+    checkout = run_command(_git_command(config.root, "checkout", "--detach", target))
     if checkout.returncode:
         print("FAIL update: could not checkout reviewed revision")
         return checkout.returncode
