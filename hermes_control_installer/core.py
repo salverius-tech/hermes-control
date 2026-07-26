@@ -14,7 +14,9 @@ except ImportError:  # pragma: no cover - exercised by Windows CI
 
         @staticmethod
         def getpwnam(user):
-            return SimpleNamespace(pw_name=user, pw_dir=str(Path.home() / user), pw_gid=-1)
+            if user != getpass.getuser():
+                raise KeyError(user)
+            return SimpleNamespace(pw_name=user, pw_dir=str(Path.home()), pw_gid=-1)
 
     pwd = _PwdCompat()
 import secrets
@@ -60,7 +62,7 @@ class CommandResult:
 
 def run_command(command: Sequence[str], *, user: str | None = None) -> CommandResult:
     argv = list(command)
-    if user and os.geteuid() == 0 and user != pwd.getpwuid(os.getuid()).pw_name:
+    if user and getattr(os, "geteuid", lambda: -1)() == 0 and user != pwd.getpwuid(os.getuid()).pw_name:
         argv = ["sudo", "-u", user, *argv]
     try:
         completed = subprocess.run(argv, text=True, capture_output=True, check=False)
@@ -251,7 +253,10 @@ def write_environment(config: InstallConfig) -> tuple[str, bool]:
     with tempfile.NamedTemporaryFile("w", dir=config.config_dir, delete=False) as temporary:
         temporary.write(render_environment(config, api_token=api_token, bridge_token=bridge_token))
         temporary.flush()
-        os.fchmod(temporary.fileno(), 0o640)
+        if hasattr(os, "fchmod"):
+            os.fchmod(temporary.fileno(), 0o640)
+        else:
+            os.chmod(temporary.name, 0o640)
         temporary_path = Path(temporary.name)
     os.replace(temporary_path, path)
     try:
@@ -321,7 +326,7 @@ def execute_install(config: InstallConfig) -> int:
     print(format_checks(checks))
     if not preflight_ok(checks):
         return 2
-    if os.geteuid() != 0:
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
         print("FAIL install: run with sudo", flush=True)
         return 2
     api_token, created_api_token = write_environment(config)

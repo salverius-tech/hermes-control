@@ -130,7 +130,11 @@ def test_default_config_uses_explicit_paths(tmp_path: Path, monkeypatch: pytest.
 def test_run_command_returns_sanitized_os_failure():
     result = run_command(["/path/that/does/not/exist"])
 
-    assert result == CommandResult(127, "", "[Errno 2] No such file or directory: '/path/that/does/not/exist'")
+    assert result.returncode == 127
+    if os.name == "nt":
+        assert result.stderr == "[WinError 2] The system cannot find the file specified"
+    else:
+        assert result.stderr == "[Errno 2] No such file or directory: '/path/that/does/not/exist'"
 
 
 def test_write_environment_is_atomic_preserves_api_token_and_restricts_mode(config: InstallConfig):
@@ -142,7 +146,8 @@ def test_write_environment_is_atomic_preserves_api_token_and_restricts_mode(conf
 
     assert api_token == "existing-api-token"
     assert created is False
-    assert env_path.stat().st_mode & 0o777 == 0o640
+    if os.name != "nt":
+        assert env_path.stat().st_mode & 0o777 == 0o640
     assert "existing-bridge-token" in env_path.read_text()
 
 
@@ -237,8 +242,8 @@ def test_update_rejects_dirty_checkout_without_mutation(monkeypatch: pytest.Monk
 
 
 def test_execute_install_stops_on_first_failed_command(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
+    monkeypatch.setattr(os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr("hermes_control_installer.core.preflight", lambda _: [Check("Repository", "PASS", "ok")])
-    monkeypatch.setattr("hermes_control_installer.core.os.geteuid", lambda: 0)
     monkeypatch.setattr("hermes_control_installer.core.write_environment", lambda _: ("api", True))
     monkeypatch.setattr("hermes_control_installer.core.write_service_units", lambda _: None)
     monkeypatch.setattr("hermes_control_installer.core.install_commands", lambda _: [["first"], ["second"]])
