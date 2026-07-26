@@ -261,7 +261,8 @@ def write_environment(config: InstallConfig) -> tuple[str, bool]:
     os.replace(temporary_path, path)
     try:
         hermes_gid = pwd.getpwnam(config.hermes_user).pw_gid
-        os.chown(path, 0, hermes_gid)
+        if hasattr(os, "chown"):
+            os.chown(path, 0, hermes_gid)
     except (KeyError, PermissionError):
         pass
     return api_token, created_api_token
