@@ -65,7 +65,11 @@ def run(label: str, cmd: list[str], cwd: Path, env: dict[str, str] | None = None
 
 def verify_backend() -> None:
     python = project_python()
-    run("backend unit tests", [python, "-m", "pytest", "services/control_api/tests", "-m", "unit", "-v"], ROOT)
+    run(
+        "backend unit tests",
+        [python, "-m", "pytest", "services/control_api/tests", "hermes_control_installer", "-m", "unit", "-v"],
+        ROOT,
+    )
     run(
         "backend integration tests",
         [python, "-m", "pytest", "services/control_api/tests", "-m", "integration", "-v"],

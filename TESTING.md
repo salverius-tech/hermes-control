@@ -54,13 +54,18 @@ Integration coverage includes successful API paths and failure paths: missing/in
 
 ### E2E
 
-Public companion API flow from mobile-style health check to authenticated task creation, websocket update, task detail, projects, and agents.
+There are two complementary e2e layers:
+
+- In-process public API contract flows in `test_e2e_mobile_flow.py`.
+- Process-level flows in `test_process_e2e.py`, which launch a real Uvicorn API subprocess and deterministic executor subprocess with temporary SQLite state.
+
+Run all backend e2e tests:
 
 ```bash
 python -m pytest services/control_api/tests -m e2e -v
 ```
 
-E2E coverage includes the mobile-facing task flow and SQLite-backed persistence across app instances.
+The process-level scenarios cover authenticated REST and WebSocket access, mandatory approval, progress and completion events, executor failure propagation, session/result persistence, and API restart persistence. They do not prove real Hermes gateway/plugin behavior, Caddy/TLS reachability, or systemd supervision.
 
 Android device review is also available as a heavier e2e verification path:
 

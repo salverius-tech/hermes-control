@@ -10,6 +10,7 @@ node_modules/
 .expo/
 dist/
 build/
+*.egg-info/
 
 # Local env / secrets
 .env

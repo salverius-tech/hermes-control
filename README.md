@@ -28,10 +28,51 @@ The mobile workspace uses pnpm exclusively. Install the mobile dependencies with
 
 ## Backend setup
 
+### Guided installer (recommended)
+
+On a Debian/Ubuntu systemd host where Hermes already works as the selected service
+user, install the repository's CLI and run the read-only preflight first:
+
 ```bash
-python -m venv .venv
-source .venv/Scripts/activate
-python -m pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -e .
+.venv/bin/hermes-control --root . preflight
+```
+
+Run a no-mutation install preview:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control install --dry-run
+```
+
+The first installer slice provisions the API/bridge configuration and systemd
+units, installs/enables the plugin from the reviewed checkout, and preserves
+existing tokens/state on repeat runs. It expects an existing private HTTPS proxy;
+it does not rewrite arbitrary Caddy configuration.
+
+After installation, verify the separate runtime states:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control doctor
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control doctor --execute-test-task
+```
+
+Update from a reviewed immutable commit after a clean checkout:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control update --ref <reviewed-commit>
+```
+
+Use `--dry-run` to resolve and display the target revision without checking it out or restarting services. Updates preserve the API database and record the installed revision under the state directory.
+
+The test task is opt-in because it invokes Hermes and may use provider resources.
+The installer prints the mobile API URL and newly generated API token only when a
+new token is created. The token is sensitive and must be stored securely.
+
+### Manual development setup
+
+```bash
 CONTROL_API_TOKEN=dev-token CONTROL_API_DB_PATH=./data/control-api.db uvicorn services.control_api.main:app --host 0.0.0.0 --port 8787
 ```
 
@@ -146,6 +187,7 @@ See `TESTING.md` for the unit, integration, e2e, edge-path, and architecture-bou
 - `TESTING.md` — verification strategy and coverage map.
 - `docs/API.md` — REST/WebSocket contract.
 - `docs/NATIVE_STORE_ROUTE_MAPPING.md` — repository-verified native Hermes store ownership, schema fixture, and API route mapping.
+- `docs/INSTALL.md` — guided Debian/Ubuntu systemd installation, update, verification, and safety boundaries.
 - `docs/OPERATIONS.md` — local runbook, Android build/sideload notes, troubleshooting.
 - `docs/DEPLOYMENT.md` — Proxmox LXC + Caddy production deployment guide.
 - `deploy/` — example systemd service, Caddy route, and environment file.

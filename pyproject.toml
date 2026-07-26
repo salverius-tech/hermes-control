@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-control"
+version = "0.1.0"
+description = "Hermes mobile control API, bridge, and installer"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+hermes-control = "hermes_control_installer.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["hermes_control_installer*"]

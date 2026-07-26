@@ -445,3 +445,29 @@ Python CLI foundation
 ```
 
 The first slice must be tested on a clean disposable Debian/Ubuntu systemd guest before production use. Defer managed Caddy, rollback execution, QR onboarding, device enrollment, and uninstall until the install/doctor path is proven.
+
+## 9. Implementation progress
+
+Completed in the current implementation branch:
+
+- CLI package and console entry point.
+- Read-only preflight checks.
+- Idempotent configuration/token rendering primitives.
+- Dry-run install plan.
+- Virtualenv and dependency installation commands.
+- Plugin installation command from the reviewed checkout.
+- API and bridge systemd installation commands.
+- API health, authentication, native-project, and opt-in harmless-task doctor checks.
+- Installer unit tests included in canonical verification.
+- README quick-start documentation.
+
+- Secure update command and immutable revision enforcement: implemented and verified.
+
+Remaining before this slice is production-ready:
+
+- Clean-host Debian/Ubuntu systemd integration test.
+- Existing HTTPS proxy/WebSocket validation against a real private endpoint.
+
+Integration blocker:
+
+- No disposable Debian/Ubuntu systemd guest is currently provisioned on this host. Docker is available, but only a Node image is present; a real clean-host test requires a Debian/Ubuntu image with systemd plus a Hermes service/profile fixture.

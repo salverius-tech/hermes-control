@@ -8,6 +8,7 @@ Start here when orienting to the project:
 - `TESTING.md` — unit/integration/e2e strategy, commands, and coverage map.
 - `docs/API.md` — companion REST/WebSocket contract.
 - `docs/NATIVE_STORE_ROUTE_MAPPING.md` — repository-verified native-store schema and route authority mapping, including synthetic-ID migration behavior and live-deployment evidence limits.
+- `docs/INSTALL.md` — guided Debian/Ubuntu systemd installation, update, verification, and safety boundaries.
 - `docs/OPERATIONS.md` — local runbook, Android build/sideload notes, and troubleshooting.
 - `docs/DEPLOYMENT.md` — Proxmox LXC + Caddy production deployment guide.
 - `deploy/` — example systemd, Caddy, and environment files for the Control API.
