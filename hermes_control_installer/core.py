@@ -63,7 +63,7 @@ class CommandResult:
 def run_command(command: Sequence[str], *, user: str | None = None) -> CommandResult:
     argv = list(command)
     if user and getattr(os, "geteuid", lambda: -1)() == 0 and user != pwd.getpwuid(os.getuid()).pw_name:
-        argv = ["sudo", "-u", user, *argv]
+        argv = ["sudo", "-H", "-u", user, *argv]
     try:
         completed = subprocess.run(argv, text=True, capture_output=True, check=False)
     except OSError as exc:
@@ -156,7 +156,40 @@ def write_install_record(
     path.chmod(0o640)
 
 
+def validate_install_paths(config: InstallConfig) -> str | None:
+    try:
+        if config.root.resolve() == config.install_dir.resolve():
+            return "source checkout and install directory must be different"
+    except OSError:
+        return "could not resolve source/install paths"
+    return None
+
+
+def snapshot_managed_files(config: InstallConfig) -> dict[Path, tuple[bool, bytes, int]]:
+    snapshot: dict[Path, tuple[bool, bytes, int]] = {}
+    for path in (_env_path(config), config.config_dir / "hermes-control-bridge.service", config.config_dir / "hermes-mobile-control-api.service"):
+        if path.exists():
+            snapshot[path] = (True, path.read_bytes(), path.stat().st_mode & 0o777)
+        else:
+            snapshot[path] = (False, b"", 0)
+    return snapshot
+
+
+def restore_managed_files(snapshot: dict[Path, tuple[bool, bytes, int]]) -> None:
+    for path, (exists, contents, mode) in snapshot.items():
+        if exists:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(contents)
+            path.chmod(mode)
+        elif path.exists():
+            path.unlink()
+
+
 def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False, operation: str = "update") -> int:
+    path_error = validate_install_paths(config)
+    if path_error:
+        print(f"FAIL update: {path_error}")
+        return 2
     if not (config.root / ".git").exists():
         print("FAIL update: root is not a Git checkout")
         return 2
@@ -179,14 +212,22 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False, op
     if dry_run:
         print("DRY-RUN update: no checkout or service mutation performed")
         return 0
+    snapshot = snapshot_managed_files(config)
     checkout = run_command(_git_command(config.root, "checkout", "--detach", target))
     if checkout.returncode:
         print("FAIL update: could not checkout reviewed revision")
         return checkout.returncode
-    result = execute_install(config, restart_components=components, start_services=False, write_record=False)
+    result = execute_install(
+        config,
+        restart_components=components,
+        start_services=False,
+        write_record=False,
+        preserve_existing=True,
+    )
     if result == 0:
         result = restart_services_for_components(components)
     if result != 0:
+        restore_managed_files(snapshot)
         restored = run_command(_git_command(config.root, "checkout", "--detach", current)) if current else None
         if restored is not None and restored.returncode:
             print("FAIL update: operation failed and previous revision could not be restored")
@@ -267,10 +308,23 @@ def uninstall(
             if result.returncode and action[0] == "stop":
                 print(f"FAIL uninstall: could not {action[0]} {service}")
                 return result.returncode or 2
+    gateway_was_active = run_command(["systemctl", "is-active", "hermes-gateway"]).returncode == 0
+    if gateway_was_active:
+        gateway_stop = run_command(["systemctl", "stop", "hermes-gateway"])
+        if gateway_stop.returncode:
+            print("FAIL uninstall: could not stop hermes-gateway")
+            return gateway_stop.returncode or 2
     plugin = run_command(plugin_uninstall_command(config), user=config.hermes_user)
     if plugin.returncode:
+        if gateway_was_active:
+            run_command(["systemctl", "start", "hermes-gateway"])
         print(f"FAIL uninstall: plugin removal failed: {plugin.stderr or plugin.stdout}")
         return plugin.returncode or 2
+    if gateway_was_active:
+        gateway_start = run_command(["systemctl", "start", "hermes-gateway"])
+        if gateway_start.returncode:
+            print("FAIL uninstall: could not restart hermes-gateway")
+            return gateway_start.returncode or 2
     for path in paths:
         try:
             _remove_path(path)
@@ -343,13 +397,25 @@ def preflight_ok(checks: list[Check]) -> bool:
     return not any(check.status == "FAIL" for check in checks)
 
 
-def install_commands(config: InstallConfig, *, start_services: bool = True) -> list[list[str]]:
+def install_commands(
+    config: InstallConfig,
+    *,
+    start_services: bool = True,
+    preserve_existing: bool = False,
+) -> list[list[str]]:
     source = config.root
     service_action = "enable --now" if start_services else "enable"
-    return [
-        ["install", "-d", "-o", "root", "-g", config.hermes_user, "-m", "0750", str(config.config_dir)],
-        ["install", "-d", "-o", config.hermes_user, "-g", config.hermes_user, "-m", "0750", str(config.state_dir)],
-        ["install", "-d", "-o", config.hermes_user, "-g", config.hermes_user, "-m", "0750", str(config.install_dir)],
+    commands = []
+    if not preserve_existing:
+        commands.extend(
+            [
+                ["install", "-d", "-o", "root", "-g", config.hermes_user, "-m", "0750", str(config.config_dir)],
+                ["install", "-d", "-o", config.hermes_user, "-g", config.hermes_user, "-m", "0750", str(config.state_dir)],
+                ["install", "-d", "-o", config.hermes_user, "-g", config.hermes_user, "-m", "0750", str(config.install_dir)],
+            ]
+        )
+    commands.extend(
+        [
         ["cp", "-a", f"{source}/.", str(config.install_dir)],
         ["python3", "-m", "venv", str(config.install_dir / ".venv")],
         [str(config.install_dir / ".venv" / "bin" / "python"), "-m", "pip", "install", "-r", str(config.install_dir / "requirements.txt")],
@@ -359,7 +425,9 @@ def install_commands(config: InstallConfig, *, start_services: bool = True) -> l
         ["systemctl", "daemon-reload"],
         ["systemctl", *service_action.split(), "hermes-control-bridge"],
         ["systemctl", *service_action.split(), "hermes-mobile-control-api"],
-    ]
+        ]
+    )
+    return commands
 
 
 def _env_path(config: InstallConfig) -> Path:
@@ -482,6 +550,8 @@ def render_service_units(config: InstallConfig) -> tuple[str, str]:
     substitutions = {
         "/opt/hermes-mobile-control": str(config.install_dir),
         "/etc/hermes-mobile-control/control-api.env": str(_env_path(config)),
+        "User=hermes": f"User={config.hermes_user}",
+        "Group=hermes": f"Group={config.hermes_user}",
     }
     rendered: list[str] = []
     for filename in ("hermes-control-bridge.service", "hermes-mobile-control-api.service"):
@@ -538,17 +608,26 @@ def execute_install(
     restart_components: set[str] | None = None,
     start_services: bool = True,
     write_record: bool = True,
+    preserve_existing: bool = False,
 ) -> int:
     checks = preflight(config)
     print(format_checks(checks))
     if not preflight_ok(checks):
+        return 2
+    path_error = validate_install_paths(config)
+    if path_error:
+        print(f"FAIL install: {path_error}")
         return 2
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         print("FAIL install: run with sudo", flush=True)
         return 2
     api_token, created_api_token = write_environment(config)
     write_service_units(config)
-    for command in install_commands(config, start_services=start_services):
+    for command in install_commands(
+        config,
+        start_services=start_services,
+        preserve_existing=preserve_existing,
+    ):
         result = run_command(command)
         if result.returncode:
             print(f"FAIL command: {' '.join(command)}\\n{result.stderr}")

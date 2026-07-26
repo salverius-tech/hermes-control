@@ -171,8 +171,8 @@ Updates require a clean Git checkout and an immutable reviewed ref:
 ```bash
 cd /opt/src/hermes-control
 git status --short
-sudo .venv/bin/hermes-control --root . update --ref <new-reviewed-commit> --dry-run
-sudo .venv/bin/hermes-control --root . update --ref <new-reviewed-commit>
+sudo .venv/bin/hermes-control --root /opt/src/hermes-control update --ref <new-reviewed-commit> --dry-run
+sudo .venv/bin/hermes-control --root /opt/src/hermes-control update --ref <new-reviewed-commit>
 ```
 
 The dry-run resolves the target revision without checkout or service mutation. The update path preserves the SQLite database, records both the previous and new revisions, and derives runtime restarts from the changed files:
@@ -219,8 +219,8 @@ If a restart or active-state check fails, the previous environment file is resto
 Rollback requires an existing install record and a clean checkout. Resolve the reviewed target first:
 
 ```bash
-sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rollback --ref <previous-reviewed-commit> --dry-run
-sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rollback --ref <previous-reviewed-commit>
+sudo .venv/bin/hermes-control --root /opt/src/hermes-control rollback --ref <previous-reviewed-commit> --dry-run
+sudo .venv/bin/hermes-control --root /opt/src/hermes-control rollback --ref <previous-reviewed-commit>
 ```
 
 Rollback uses the same component-aware restart rules as update, preserves configuration and SQLite state, and records `operation: rollback` plus the previous/new revisions in `install-record.json`. It refuses to proceed if the checkout does not match the recorded installed revision.

@@ -34,6 +34,7 @@ from hermes_control_installer.core import (
     rotate_tokens,
     uninstall,
     update_install,
+    validate_install_paths,
     write_environment,
 )
 
@@ -97,7 +98,7 @@ def test_render_service_units_use_selected_paths(config: InstallConfig):
     config.root.joinpath("deploy").mkdir()
     for name in ("hermes-control-bridge.service", "hermes-mobile-control-api.service"):
         config.root.joinpath("deploy", name).write_text(
-            "WorkingDirectory=/opt/hermes-mobile-control\\nEnvironmentFile=/etc/hermes-mobile-control/control-api.env\\n"
+            "User=hermes\\nGroup=hermes\\nWorkingDirectory=/opt/hermes-mobile-control\\nEnvironmentFile=/etc/hermes-mobile-control/control-api.env\\n"
         )
 
     bridge, api = render_service_units(config)
@@ -105,7 +106,37 @@ def test_render_service_units_use_selected_paths(config: InstallConfig):
     assert str(config.install_dir) in bridge
     assert str(config.install_dir) in api
     assert str(config.config_dir / "control-api.env") in bridge
+    assert "User=hermes" not in bridge
+    assert f"User={config.hermes_user}" in bridge
     assert "/opt/hermes-mobile-control" not in bridge
+
+
+def test_run_command_sets_target_home_for_privileged_user(monkeypatch):
+    observed = {}
+    monkeypatch.setattr("hermes_control_installer.core.os.geteuid", lambda: 0)
+    monkeypatch.setattr("hermes_control_installer.core.pwd.getpwuid", lambda _: type("User", (), {"pw_name": "root"})())
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr("hermes_control_installer.core.subprocess.run", lambda argv, **kwargs: (observed.setdefault("argv", argv), Completed())[1])
+    run_command(["hermes", "tools", "list"], user="anvil")
+
+    assert observed["argv"][:4] == ["sudo", "-H", "-u", "anvil"]
+
+
+def test_validate_install_paths_rejects_same_source_and_destination(config: InstallConfig):
+    same = InstallConfig(
+        root=config.install_dir,
+        hermes_user=config.hermes_user,
+        install_dir=config.install_dir,
+        config_dir=config.config_dir,
+        state_dir=config.state_dir,
+    )
+
+    assert validate_install_paths(same) == "source checkout and install directory must be different"
 
 
 def test_run_test_task_fails_without_token(config: InstallConfig):
@@ -381,6 +412,12 @@ def test_uninstall_requires_confirmation_and_dry_run_is_read_only(config: Instal
 
 def test_update_failure_after_checkout_restores_previous_revision(monkeypatch: pytest.MonkeyPatch, config: InstallConfig, capsys: pytest.CaptureFixture[str]):
     config.root.joinpath(".git").mkdir()
+    config.config_dir.mkdir()
+    env = config.config_dir / "control-api.env"
+    env.write_text("CONTROL_API_TOKEN=old\\n")
+    bridge_unit = config.config_dir / "hermes-control-bridge.service"
+    bridge_unit.write_text("User=anvil\\n")
+    before = {path: path.read_bytes() for path in (env, bridge_unit)}
     monkeypatch.setattr("hermes_control_installer.core.git_is_clean", lambda _: True)
     revisions = iter(["old", "new"])
     monkeypatch.setattr("hermes_control_installer.core.git_revision", lambda *args: next(revisions))
@@ -396,6 +433,7 @@ def test_update_failure_after_checkout_restores_previous_revision(monkeypatch: p
 
     assert update_install(config, "reviewed-ref") == 7
     assert commands[-1][-3:] == ["checkout", "--detach", "old"]
+    assert {path: path.read_bytes() for path in before} == before
     assert "previous revision restored" in capsys.readouterr().out
 
 
@@ -454,7 +492,13 @@ def test_update_records_previous_revision_and_selected_restarts(monkeypatch: pyt
     monkeypatch.setattr("hermes_control_installer.core.write_install_record", record)
 
     assert update_install(config, "reviewed-ref") == 0
-    execute.assert_called_once_with(config, restart_components={"api"}, start_services=False, write_record=False)
+    execute.assert_called_once_with(
+        config,
+        restart_components={"api"},
+        start_services=False,
+        write_record=False,
+        preserve_existing=True,
+    )
     restart.assert_called_once_with({"api"})
     record.assert_called_once_with(config, "new", previous_revision="old", restarted_components={"api"}, operation="update")
 
