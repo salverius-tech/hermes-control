@@ -14,6 +14,7 @@ from .core import (
     preflight,
     preflight_ok,
     render_install_plan,
+    rotate_tokens,
     update_install,
 )
 
@@ -41,6 +42,15 @@ def _parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--ref", required=True, help="Reviewed Git tag or commit")
     update_parser.add_argument("--dry-run", action="store_true", help="Resolve the revision without checkout or service mutation")
     update_parser.set_defaults(action="update")
+
+    rotate_parser = subparsers.add_parser("rotate-token", help="Rotate an API or internal bridge token")
+    rotate_parser.add_argument(
+        "--scope",
+        choices=("api", "bridge", "both"),
+        default="api",
+        help="Token to rotate (default: api; bridge also restarts the API to reload shared credentials)",
+    )
+    rotate_parser.set_defaults(action="rotate-token")
 
     return parser
 
@@ -74,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if not any(check.status == "FAIL" for check in checks) else 2
     if args.action == "update":
         return update_install(config, args.ref, dry_run=args.dry_run)
+    if args.action == "rotate-token":
+        return rotate_tokens(config, scope=args.scope)
     parser.error(f"unsupported command: {args.command}")
     return 2
 

@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from hermes_control_installer import cli
 from hermes_control_installer.core import (
     Check,
     CommandResult,
@@ -27,6 +28,7 @@ from hermes_control_installer.core import (
     render_service_units,
     run_command,
     run_test_task,
+    rotate_tokens,
     update_install,
     write_environment,
 )
@@ -149,6 +151,66 @@ def test_write_environment_is_atomic_preserves_api_token_and_restricts_mode(conf
     if os.name != "nt":
         assert env_path.stat().st_mode & 0o777 == 0o640
     assert "existing-bridge-token" in env_path.read_text()
+
+
+def test_rotate_api_token_preserves_bridge_token_and_restarts_api(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
+    config.config_dir.mkdir()
+    env_path = config.config_dir / "control-api.env"
+    env_path.write_text("CONTROL_API_TOKEN=old-api\nCONTROL_API_HERMES_PLUGIN_TOKEN=old-bridge\n")
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return CommandResult(0, "active", "") if command[:2] == ["systemctl", "is-active"] else CommandResult(0, "", "")
+
+    monkeypatch.setattr("hermes_control_installer.core.run_command", fake_run)
+
+    assert rotate_tokens(config, scope="api") == 0
+    contents = env_path.read_text()
+    assert "CONTROL_API_TOKEN=old-api" not in contents
+    assert "CONTROL_API_HERMES_PLUGIN_TOKEN=old-bridge" in contents
+    assert calls == [["systemctl", "restart", "hermes-mobile-control-api"], ["systemctl", "is-active", "hermes-mobile-control-api"]]
+
+
+def test_rotate_bridge_token_restarts_bridge_before_api_and_never_prints_bridge(
+    monkeypatch: pytest.MonkeyPatch, config: InstallConfig, capsys: pytest.CaptureFixture[str]
+):
+    config.config_dir.mkdir()
+    env_path = config.config_dir / "control-api.env"
+    env_path.write_text("CONTROL_API_TOKEN=old-api\nCONTROL_API_HERMES_PLUGIN_TOKEN=old-bridge\n")
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return CommandResult(0, "active", "") if command[:2] == ["systemctl", "is-active"] else CommandResult(0, "", "")
+
+    monkeypatch.setattr("hermes_control_installer.core.run_command", fake_run)
+
+    assert rotate_tokens(config, scope="bridge") == 0
+    contents = env_path.read_text()
+    assert "CONTROL_API_TOKEN=old-api" in contents
+    assert "CONTROL_API_HERMES_PLUGIN_TOKEN=old-bridge" not in contents
+    assert calls == [
+        ["systemctl", "restart", "hermes-control-bridge"],
+        ["systemctl", "is-active", "hermes-control-bridge"],
+        ["systemctl", "restart", "hermes-mobile-control-api"],
+        ["systemctl", "is-active", "hermes-mobile-control-api"],
+    ]
+    assert "old-bridge" not in capsys.readouterr().out
+
+
+def test_rotate_token_cli_forwards_scope(monkeypatch, config: InstallConfig):
+    monkeypatch.setattr(cli, "default_config", lambda *args, **kwargs: config)
+    observed = {}
+
+    def fake_rotate(_, *, scope):
+        observed["scope"] = scope
+        return 0
+
+    monkeypatch.setattr(cli, "rotate_tokens", fake_rotate)
+
+    assert cli.main(["--root", str(config.root), "rotate-token", "--scope", "both"]) == 0
+    assert observed == {"scope": "both"}
 
 
 def test_api_request_encodes_authenticated_json(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):

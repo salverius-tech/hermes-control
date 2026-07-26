@@ -182,7 +182,31 @@ sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control doctor
 sudo systemctl is-active hermes-control-bridge hermes-mobile-control-api
 ```
 
-Component-aware restart decisions, token rotation, rollback execution, and uninstall are not part of this first slice.
+## Rotate tokens
+
+Rotate the mobile/API bearer token without changing the internal bridge token:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rotate-token
+```
+
+The command prints the new mobile API token once; update the mobile client or secret store immediately. It restarts the API and verifies that the service is active.
+
+Rotate the internal API/bridge token instead:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rotate-token --scope bridge
+```
+
+This never prints the bridge token. It restarts and verifies the bridge first, then restarts and verifies the API so both processes load the same new credential. To rotate both credentials in one operation:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rotate-token --scope both
+```
+
+If a restart or active-state check fails, inspect the service journal before retrying. Do not paste the environment file or token values into diagnostics or support reports.
+
+Rollback execution and uninstall remain deferred.
 
 ## Existing private HTTPS proxy
 

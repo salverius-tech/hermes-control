@@ -242,10 +242,15 @@ def render_environment(config: InstallConfig, *, api_token: str, bridge_token: s
     )
 
 
-def write_environment(config: InstallConfig) -> tuple[str, bool]:
+def write_environment(
+    config: InstallConfig,
+    *,
+    rotate_api_token: bool = False,
+    rotate_bridge_token: bool = False,
+) -> tuple[str, bool]:
     path = _env_path(config)
-    api_token = _existing_env_value(path, "CONTROL_API_TOKEN")
-    bridge_token = _existing_env_value(path, "CONTROL_API_HERMES_PLUGIN_TOKEN")
+    api_token = None if rotate_api_token else _existing_env_value(path, "CONTROL_API_TOKEN")
+    bridge_token = None if rotate_bridge_token else _existing_env_value(path, "CONTROL_API_HERMES_PLUGIN_TOKEN")
     created_api_token = api_token is None
     api_token = api_token or secrets.token_urlsafe(48)
     bridge_token = bridge_token or secrets.token_urlsafe(48)
@@ -266,6 +271,39 @@ def write_environment(config: InstallConfig) -> tuple[str, bool]:
     except (KeyError, PermissionError):
         pass
     return api_token, created_api_token
+
+
+def rotate_tokens(config: InstallConfig, *, scope: str) -> int:
+    if scope not in {"api", "bridge", "both"}:
+        print(f"FAIL rotate-token: unsupported scope {scope}")
+        return 2
+
+    rotate_api = scope in {"api", "both"}
+    rotate_bridge = scope in {"bridge", "both"}
+    api_token, _ = write_environment(
+        config,
+        rotate_api_token=rotate_api,
+        rotate_bridge_token=rotate_bridge,
+    )
+
+    services = ["hermes-control-bridge"] if rotate_bridge else []
+    services.append("hermes-mobile-control-api")
+    for service in services:
+        result = run_command(["systemctl", "restart", service])
+        if result.returncode:
+            print(f"FAIL rotate-token: could not restart {service}")
+            return result.returncode or 2
+        active = run_command(["systemctl", "is-active", service])
+        if active.returncode or active.stdout.strip() != "active":
+            print(f"FAIL rotate-token: {service} is not active")
+            return 2
+
+    if rotate_api:
+        print(f"PASS rotate-token: {scope} token rotated")
+        print(f"Mobile API token (store securely): {api_token}")
+    else:
+        print("PASS rotate-token: bridge token rotated; API and bridge restarted")
+    return 0
 
 
 def render_service_units(config: InstallConfig) -> tuple[str, str]:
