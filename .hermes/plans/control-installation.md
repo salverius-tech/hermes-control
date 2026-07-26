@@ -467,3 +467,7 @@ Remaining before this slice is production-ready:
 
 - Clean-host Debian/Ubuntu systemd integration test.
 - Existing HTTPS proxy/WebSocket validation against a real private endpoint.
+
+Integration blocker:
+
+- No disposable Debian/Ubuntu systemd guest is currently provisioned on this host. Docker is available, but only a Node image is present; a real clean-host test requires a Debian/Ubuntu image with systemd plus a Hermes service/profile fixture.
