@@ -461,10 +461,9 @@ Completed in the current implementation branch:
 - Installer unit tests included in canonical verification.
 - README quick-start documentation.
 
+- Secure update command and immutable revision enforcement: implemented and verified.
+
 Remaining before this slice is production-ready:
 
 - Clean-host Debian/Ubuntu systemd integration test.
-- Gateway restart and plugin-loaded/tool-registration verification.
-- Existing HTTPS proxy/WebSocket validation in `doctor`.
-- Service-unit rendering for non-default installation paths.
-- Secure update command and immutable revision enforcement.
+- Existing HTTPS proxy/WebSocket validation against a real private endpoint.

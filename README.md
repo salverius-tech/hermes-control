@@ -58,6 +58,14 @@ sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control doctor
 sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control doctor --execute-test-task
 ```
 
+Update from a reviewed immutable commit after a clean checkout:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control update --ref <reviewed-commit>
+```
+
+Use `--dry-run` to resolve and display the target revision without checking it out or restarting services. Updates preserve the API database and record the installed revision under the state directory.
+
 The test task is opt-in because it invokes Hermes and may use provider resources.
 The installer prints the mobile API URL and newly generated API token only when a
 new token is created. The token is sensitive and must be stored securely.

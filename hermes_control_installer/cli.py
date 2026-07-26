@@ -4,7 +4,18 @@ import argparse
 import json
 from pathlib import Path
 
-from .core import Check, default_config, doctor, execute_install, format_checks, install_commands, preflight, preflight_ok, render_install_plan
+from .core import (
+    Check,
+    default_config,
+    doctor,
+    execute_install,
+    format_checks,
+    install_commands,
+    preflight,
+    preflight_ok,
+    render_install_plan,
+    update_install,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -25,6 +36,11 @@ def _parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser("doctor", help="Check installed runtime state")
     doctor_parser.add_argument("--execute-test-task", action="store_true", help="Run the harmless end-to-end task probe")
     doctor_parser.set_defaults(action="doctor")
+
+    update_parser = subparsers.add_parser("update", help="Update from a reviewed immutable Git revision")
+    update_parser.add_argument("--ref", required=True, help="Reviewed Git tag or commit")
+    update_parser.add_argument("--dry-run", action="store_true", help="Resolve the revision without checkout or service mutation")
+    update_parser.set_defaults(action="update")
 
     return parser
 
@@ -56,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
         checks = doctor(config, execute_test_task=args.execute_test_task)
         _emit(checks, as_json=args.json)
         return 0 if not any(check.status == "FAIL" for check in checks) else 2
+    if args.action == "update":
+        return update_install(config, args.ref, dry_run=args.dry_run)
     parser.error(f"unsupported command: {args.command}")
     return 2
 

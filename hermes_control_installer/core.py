@@ -54,6 +54,59 @@ def run_command(command: Sequence[str], *, user: str | None = None) -> CommandRe
     return CommandResult(completed.returncode, completed.stdout.strip(), completed.stderr.strip())
 
 
+def git_revision(root: Path, ref: str = "HEAD") -> str | None:
+    result = run_command(["git", "-C", str(root), "rev-parse", "--verify", f"{ref}^{{commit}}"])
+    return result.stdout if result.returncode == 0 and result.stdout else None
+
+
+def git_is_clean(root: Path) -> bool:
+    result = run_command(["git", "-C", str(root), "status", "--porcelain"])
+    return result.returncode == 0 and not result.stdout
+
+
+def write_install_record(config: InstallConfig, revision: str) -> None:
+    config.state_dir.mkdir(parents=True, exist_ok=True)
+    record = {"revision": revision, "install_dir": str(config.install_dir), "require_approval": config.require_approval}
+    path = config.state_dir / "install-record.json"
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    temporary.replace(path)
+    path.chmod(0o640)
+
+
+def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False) -> int:
+    if not (config.root / ".git").exists():
+        print("FAIL update: root is not a Git checkout")
+        return 2
+    if not git_is_clean(config.root):
+        print("FAIL update: checkout has uncommitted changes")
+        return 2
+    current = git_revision(config.root)
+    target = git_revision(config.root, ref)
+    if target is None:
+        fetched = run_command(["git", "-C", str(config.root), "fetch", "--ff-only", "origin", ref])
+        if fetched.returncode:
+            print("FAIL update: reviewed ref is unavailable")
+            return 2
+        target = git_revision(config.root, ref)
+    if target is None:
+        print("FAIL update: ref does not resolve to a commit")
+        return 2
+    print(f"Current revision: {current or 'unknown'}")
+    print(f"Target revision: {target}")
+    if dry_run:
+        print("DRY-RUN update: no checkout or service mutation performed")
+        return 0
+    checkout = run_command(["git", "-C", str(config.root), "checkout", "--detach", target])
+    if checkout.returncode:
+        print("FAIL update: could not checkout reviewed revision")
+        return checkout.returncode
+    result = execute_install(config)
+    if result == 0:
+        write_install_record(config, target)
+    return result
+
+
 def detect_hermes_user() -> str | None:
     configured = os.getenv("HERMES_CONTROL_USER")
     candidates = [configured] if configured else []
@@ -273,6 +326,9 @@ def execute_install(config: InstallConfig) -> int:
     if plugin_check.status == "FAIL":
         print(f"FAIL {plugin_check.name}: {plugin_check.detail}")
         return 2
+    revision = git_revision(config.root)
+    if revision:
+        write_install_record(config, revision)
     print("PASS install: services enabled and plugin loaded")
     if created_api_token:
         print(f"Mobile API token (store securely): {api_token}")
