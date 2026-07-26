@@ -16,6 +16,7 @@ from hermes_control_installer.core import (
     preflight,
     render_environment,
     render_install_plan,
+    render_service_units,
     run_test_task,
 )
 
@@ -73,6 +74,21 @@ def test_preflight_reports_missing_repository(tmp_path: Path, monkeypatch: pytes
 
     assert any(check.name == "Repository" and check.status == "FAIL" for check in checks)
     assert any(check.name == "Hermes service user" and check.status == "FAIL" for check in checks)
+
+
+def test_render_service_units_use_selected_paths(config: InstallConfig):
+    config.root.joinpath("deploy").mkdir()
+    for name in ("hermes-control-bridge.service", "hermes-mobile-control-api.service"):
+        config.root.joinpath("deploy", name).write_text(
+            "WorkingDirectory=/opt/hermes-mobile-control\\nEnvironmentFile=/etc/hermes-mobile-control/control-api.env\\n"
+        )
+
+    bridge, api = render_service_units(config)
+
+    assert str(config.install_dir) in bridge
+    assert str(config.install_dir) in api
+    assert str(config.config_dir / "control-api.env") in bridge
+    assert "/opt/hermes-mobile-control" not in bridge
 
 
 def test_run_test_task_fails_without_token(config: InstallConfig):

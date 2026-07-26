@@ -121,8 +121,8 @@ def install_commands(config: InstallConfig) -> list[list[str]]:
         ["python3", "-m", "venv", str(config.install_dir / ".venv")],
         [str(config.install_dir / ".venv" / "bin" / "python"), "-m", "pip", "install", "-r", str(config.install_dir / "requirements.txt")],
         [str(config.install_dir / ".venv" / "bin" / "python"), "-m", "pip", "install", "-e", str(config.install_dir)],
-        ["install", "-o", "root", "-g", "root", "-m", "0644", str(config.install_dir / "deploy" / "hermes-control-bridge.service"), "/etc/systemd/system/hermes-control-bridge.service"],
-        ["install", "-o", "root", "-g", "root", "-m", "0644", str(config.install_dir / "deploy" / "hermes-mobile-control-api.service"), "/etc/systemd/system/hermes-mobile-control-api.service"],
+        ["install", "-o", "root", "-g", "root", "-m", "0644", str(config.config_dir / "hermes-control-bridge.service"), "/etc/systemd/system/hermes-control-bridge.service"],
+        ["install", "-o", "root", "-g", "root", "-m", "0644", str(config.config_dir / "hermes-mobile-control-api.service"), "/etc/systemd/system/hermes-mobile-control-api.service"],
         ["systemctl", "daemon-reload"],
         ["systemctl", "enable", "--now", "hermes-control-bridge"],
         ["systemctl", "enable", "--now", "hermes-mobile-control-api"],
@@ -189,8 +189,45 @@ def write_environment(config: InstallConfig) -> tuple[str, bool]:
     return api_token, created_api_token
 
 
+def render_service_units(config: InstallConfig) -> tuple[str, str]:
+    substitutions = {
+        "/opt/hermes-mobile-control": str(config.install_dir),
+        "/etc/hermes-mobile-control/control-api.env": str(_env_path(config)),
+    }
+    rendered: list[str] = []
+    for filename in ("hermes-control-bridge.service", "hermes-mobile-control-api.service"):
+        content = (config.root / "deploy" / filename).read_text()
+        for source, target in substitutions.items():
+            content = content.replace(source, target)
+        rendered.append(content)
+    return rendered[0], rendered[1]
+
+
+def write_service_units(config: InstallConfig) -> tuple[Path, Path]:
+    bridge, api = render_service_units(config)
+    config.config_dir.mkdir(parents=True, exist_ok=True)
+    paths = (config.config_dir / "hermes-control-bridge.service", config.config_dir / "hermes-mobile-control-api.service")
+    for path, content in zip(paths, (bridge, api), strict=True):
+        path.write_text(content)
+        path.chmod(0o644)
+    return paths
+
+
 def plugin_install_command(config: InstallConfig) -> list[str]:
     return ["hermes", "plugins", "install", f"file://{config.install_dir}", "--force", "--enable"]
+
+
+def plugin_verify_command() -> list[str]:
+    return ["hermes", "tools", "list"]
+
+
+def verify_plugin(config: InstallConfig) -> Check:
+    result = run_command(plugin_verify_command(), user=config.hermes_user)
+    if result.returncode:
+        return Check("Hermes plugin loaded", "FAIL", "tools list failed")
+    if "hermes_control" not in result.stdout:
+        return Check("Hermes plugin loaded", "FAIL", "hermes_control tool not registered")
+    return Check("Hermes plugin loaded", "PASS", "hermes_control registered")
 
 
 def render_install_plan(config: InstallConfig) -> str:
@@ -198,6 +235,7 @@ def render_install_plan(config: InstallConfig) -> str:
         f"Install revision source: {config.root}",
         f"Hermes user: {config.hermes_user}",
         "Generate or preserve protected API and bridge tokens",
+        "Render service units for the selected install/config paths",
         f"Install and enable plugin from file://{config.root}",
         "$ " + " ".join(plugin_install_command(config)),
     ]
@@ -214,6 +252,7 @@ def execute_install(config: InstallConfig) -> int:
         print("FAIL install: run with sudo", flush=True)
         return 2
     api_token, created_api_token = write_environment(config)
+    write_service_units(config)
     for command in install_commands(config):
         result = run_command(command)
         if result.returncode:
@@ -223,7 +262,17 @@ def execute_install(config: InstallConfig) -> int:
     if plugin_result.returncode:
         print(f"FAIL plugin install: {plugin_result.stderr or plugin_result.stdout}")
         return plugin_result.returncode
-    print("PASS install: services enabled and plugin installed")
+    gateway_state = run_command(["systemctl", "is-active", "hermes-gateway"])
+    if gateway_state.returncode == 0 and gateway_state.stdout == "active":
+        gateway_restart = run_command(["systemctl", "restart", "hermes-gateway"])
+        if gateway_restart.returncode:
+            print("FAIL gateway restart")
+            return gateway_restart.returncode
+    plugin_check = verify_plugin(config)
+    if plugin_check.status == "FAIL":
+        print(f"FAIL {plugin_check.name}: {plugin_check.detail}")
+        return 2
+    print("PASS install: services enabled and plugin loaded")
     if created_api_token:
         print(f"Mobile API token (store securely): {api_token}")
     else:
