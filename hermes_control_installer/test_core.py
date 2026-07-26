@@ -16,6 +16,7 @@ from hermes_control_installer.core import (
     _api_check,
     _websocket_check,
     api_request,
+    changed_components,
     default_config,
     doctor,
     execute_install,
@@ -26,9 +27,12 @@ from hermes_control_installer.core import (
     render_environment,
     render_install_plan,
     render_service_units,
+    restart_services_for_components,
+    rollback_install,
     run_command,
     run_test_task,
     rotate_tokens,
+    uninstall,
     update_install,
     write_environment,
 )
@@ -199,6 +203,24 @@ def test_rotate_bridge_token_restarts_bridge_before_api_and_never_prints_bridge(
     assert "old-bridge" not in capsys.readouterr().out
 
 
+def test_rotate_token_restores_environment_when_restart_fails(
+    monkeypatch: pytest.MonkeyPatch, config: InstallConfig, capsys: pytest.CaptureFixture[str]
+):
+    config.config_dir.mkdir()
+    env_path = config.config_dir / "control-api.env"
+    original = b"CONTROL_API_TOKEN=old-api\nCONTROL_API_HERMES_PLUGIN_TOKEN=old-bridge\n"
+    env_path.write_bytes(original)
+
+    monkeypatch.setattr(
+        "hermes_control_installer.core.run_command",
+        lambda command, **kwargs: CommandResult(17, "", "failed") if command[:2] == ["systemctl", "restart"] else CommandResult(0, "", ""),
+    )
+
+    assert rotate_tokens(config, scope="api") == 17
+    assert env_path.read_bytes() == original
+    assert "previous token environment restored" in capsys.readouterr().out
+
+
 def test_rotate_token_cli_forwards_scope(monkeypatch, config: InstallConfig):
     monkeypatch.setattr(cli, "default_config", lambda *args, **kwargs: config)
     observed = {}
@@ -290,6 +312,153 @@ def test_run_test_task_creates_approves_and_waits_for_completion(monkeypatch: py
     assert requests[2][0:2] == ("/tasks/task-one/approve", "POST")
 
 
+def test_changed_components_maps_runtime_paths(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "hermes_control_installer.core.run_command",
+        lambda command: CommandResult(0, "services/control_api/main.py\nservices/hermes_extension/host.py\nREADME.md", ""),
+    )
+
+    assert changed_components(tmp_path, "old", "new") == {"api", "bridge"}
+
+
+def test_restart_services_for_components_orders_bridge_api_and_gateway(monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return CommandResult(0, "active", "") if command[:2] == ["systemctl", "is-active"] else CommandResult(0, "", "")
+
+    monkeypatch.setattr("hermes_control_installer.core.run_command", fake_run)
+
+    assert restart_services_for_components({"bridge", "plugin"}) == 0
+    assert calls == [
+        ["systemctl", "restart", "hermes-control-bridge"],
+        ["systemctl", "is-active", "hermes-control-bridge"],
+        ["systemctl", "restart", "hermes-mobile-control-api"],
+        ["systemctl", "is-active", "hermes-mobile-control-api"],
+        ["systemctl", "is-active", "hermes-gateway"],
+        ["systemctl", "restart", "hermes-gateway"],
+    ]
+
+
+def test_install_record_keeps_revision_history_and_components(config: InstallConfig):
+    from hermes_control_installer.core import write_install_record
+
+    write_install_record(config, "new", previous_revision="old", restarted_components={"api"})
+
+    record = json.loads((config.state_dir / "install-record.json").read_text())
+    assert record["revision"] == "new"
+    assert record["previous_revision"] == "old"
+    assert record["restarted_components"] == ["api"]
+
+
+def test_rollback_requires_install_record(config: InstallConfig, capsys: pytest.CaptureFixture[str]):
+    assert rollback_install(config, "old-ref") == 2
+    assert "no install record" in capsys.readouterr().out
+
+
+def test_rollback_delegates_to_update_and_records_operation(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
+    config.state_dir.mkdir()
+    (config.state_dir / "install-record.json").write_text(json.dumps({"revision": "current"}))
+    monkeypatch.setattr("hermes_control_installer.core.git_revision", lambda _: "current")
+    update = Mock(return_value=0)
+    monkeypatch.setattr("hermes_control_installer.core.update_install", update)
+
+    assert rollback_install(config, "old-ref", dry_run=True) == 0
+    update.assert_called_once_with(config, "old-ref", dry_run=True, operation="rollback")
+
+
+def test_uninstall_requires_confirmation_and_dry_run_is_read_only(config: InstallConfig, capsys: pytest.CaptureFixture[str]):
+    config.install_dir.mkdir(parents=True)
+    marker = config.install_dir / "keep"
+    marker.write_text("data")
+
+    assert uninstall(config) == 2
+    assert uninstall(config, dry_run=True) == 0
+    assert marker.exists()
+    assert "DRY-RUN uninstall" in capsys.readouterr().out
+
+
+def test_update_failure_after_checkout_restores_previous_revision(monkeypatch: pytest.MonkeyPatch, config: InstallConfig, capsys: pytest.CaptureFixture[str]):
+    config.root.joinpath(".git").mkdir()
+    monkeypatch.setattr("hermes_control_installer.core.git_is_clean", lambda _: True)
+    revisions = iter(["old", "new"])
+    monkeypatch.setattr("hermes_control_installer.core.git_revision", lambda *args: next(revisions))
+    monkeypatch.setattr("hermes_control_installer.core.changed_components", lambda *_: {"api"})
+    commands = []
+
+    def fake_run(command):
+        commands.append(command)
+        return CommandResult(0, "", "")
+
+    monkeypatch.setattr("hermes_control_installer.core.run_command", fake_run)
+    monkeypatch.setattr("hermes_control_installer.core.execute_install", Mock(return_value=7))
+
+    assert update_install(config, "reviewed-ref") == 7
+    assert commands[-1][-3:] == ["checkout", "--detach", "old"]
+    assert "previous revision restored" in capsys.readouterr().out
+
+
+def test_uninstall_plugin_failure_preserves_resources(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
+    config.install_dir.mkdir(parents=True)
+    config.state_dir.mkdir(parents=True)
+    marker = config.install_dir / "keep"
+    marker.write_text("data")
+    state_marker = config.state_dir / "state"
+    state_marker.write_text("data")
+    monkeypatch.setattr("hermes_control_installer.core.os.geteuid", lambda: 0)
+
+    def fake_run(command, **kwargs):
+        if command[:3] == ["hermes", "plugins", "uninstall"]:
+            return CommandResult(1, "", "plugin unavailable")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setattr("hermes_control_installer.core.run_command", fake_run)
+
+    assert uninstall(config, confirmed=True, purge_state=True) == 1
+    assert marker.exists()
+    assert state_marker.exists()
+
+
+def test_uninstall_is_retryable_after_transient_plugin_failure(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
+    monkeypatch.setattr("hermes_control_installer.core.os.geteuid", lambda: 0)
+    removed = []
+    monkeypatch.setattr("hermes_control_installer.core._remove_path", removed.append)
+    attempts = iter([1, 0])
+
+    def fake_run(command, **kwargs):
+        if command[:3] == ["hermes", "plugins", "uninstall"]:
+            return CommandResult(next(attempts), "", "plugin unavailable")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setattr("hermes_control_installer.core.run_command", fake_run)
+
+    assert uninstall(config, confirmed=True) == 1
+    assert removed == []
+    assert uninstall(config, confirmed=True) == 0
+    assert len(removed) == 3
+
+
+def test_update_records_previous_revision_and_selected_restarts(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
+    config.root.joinpath(".git").mkdir()
+    monkeypatch.setattr("hermes_control_installer.core.git_is_clean", lambda _: True)
+    revisions = iter(["old", "new"])
+    monkeypatch.setattr("hermes_control_installer.core.git_revision", lambda *args: next(revisions))
+    monkeypatch.setattr("hermes_control_installer.core.changed_components", lambda *_: {"api"})
+    monkeypatch.setattr("hermes_control_installer.core.run_command", lambda command: CommandResult(0, "", ""))
+    execute = Mock(return_value=0)
+    restart = Mock(return_value=0)
+    record = Mock()
+    monkeypatch.setattr("hermes_control_installer.core.execute_install", execute)
+    monkeypatch.setattr("hermes_control_installer.core.restart_services_for_components", restart)
+    monkeypatch.setattr("hermes_control_installer.core.write_install_record", record)
+
+    assert update_install(config, "reviewed-ref") == 0
+    execute.assert_called_once_with(config, restart_components={"api"}, start_services=False, write_record=False)
+    restart.assert_called_once_with({"api"})
+    record.assert_called_once_with(config, "new", previous_revision="old", restarted_components={"api"}, operation="update")
+
+
 def test_update_rejects_dirty_checkout_without_mutation(monkeypatch: pytest.MonkeyPatch, config: InstallConfig, capsys: pytest.CaptureFixture[str]):
     config.root.joinpath(".git").mkdir()
     monkeypatch.setattr("hermes_control_installer.core.git_is_clean", lambda _: False)
@@ -308,7 +477,7 @@ def test_execute_install_stops_on_first_failed_command(monkeypatch: pytest.Monke
     monkeypatch.setattr("hermes_control_installer.core.preflight", lambda _: [Check("Repository", "PASS", "ok")])
     monkeypatch.setattr("hermes_control_installer.core.write_environment", lambda _: ("api", True))
     monkeypatch.setattr("hermes_control_installer.core.write_service_units", lambda _: None)
-    monkeypatch.setattr("hermes_control_installer.core.install_commands", lambda _: [["first"], ["second"]])
+    monkeypatch.setattr("hermes_control_installer.core.install_commands", lambda _, **kwargs: [["first"], ["second"]])
     calls = []
 
     def fail_first(command, **kwargs):

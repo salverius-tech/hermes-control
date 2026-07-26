@@ -462,11 +462,17 @@ Completed in the current implementation branch:
 - README quick-start documentation.
 
 - Secure update command and immutable revision enforcement: implemented and verified.
+- Component-aware update restart selection: implemented and verified.
+- Previous/new revision and restarted-component recording: implemented and verified.
+- API, bridge, and combined token rotation with restart verification and environment rollback: implemented and verified.
+- Immutable rollback command with install-record guard: implemented and verified.
+- Confirmed uninstall with config/state purge flags and dry-run plan: implemented and verified.
 
 Remaining before this slice is production-ready:
 
 - Clean-host Debian/Ubuntu systemd integration test.
 - Existing HTTPS proxy/WebSocket validation against a real private endpoint.
+- Real Hermes gateway/plugin lifecycle validation.
 
 Integration blocker:
 

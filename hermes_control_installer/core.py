@@ -85,9 +85,70 @@ def git_is_clean(root: Path) -> bool:
     return result.returncode == 0 and not result.stdout
 
 
-def write_install_record(config: InstallConfig, revision: str) -> None:
+def changed_components(root: Path, current: str | None, target: str) -> set[str]:
+    if not current or current == target:
+        return {"api", "bridge", "plugin"}
+    result = run_command(_git_command(root, "diff", "--name-only", current, target))
+    if result.returncode:
+        return {"api", "bridge", "plugin"}
+    paths = result.stdout.splitlines()
+    components: set[str] = set()
+    for path in paths:
+        if path.startswith("services/control_api/") or path in {"requirements.txt", "pyproject.toml"} or path.startswith("hermes_control_installer/") or path == "deploy/hermes-mobile-control-api.service":
+            components.add("api")
+        if path.startswith("services/hermes_extension/") or path == "deploy/hermes-control-bridge.service":
+            components.add("bridge")
+        if path.startswith("hermes_extension/") or path in {"plugin.yaml", "manifest.yaml"}:
+            components.add("plugin")
+    return components
+
+
+def component_services(components: set[str]) -> list[str]:
+    services: list[str] = []
+    if "bridge" in components:
+        services.append("hermes-control-bridge")
+    if "api" in components or "bridge" in components:
+        services.append("hermes-mobile-control-api")
+    return services
+
+
+def restart_services_for_components(components: set[str]) -> int:
+    for service in component_services(components):
+        result = run_command(["systemctl", "restart", service])
+        if result.returncode:
+            print(f"FAIL update: could not restart {service}")
+            return result.returncode or 2
+        active = run_command(["systemctl", "is-active", service])
+        if active.returncode or active.stdout.strip() != "active":
+            print(f"FAIL update: {service} is not active")
+            return 2
+    if "plugin" in components:
+        state = run_command(["systemctl", "is-active", "hermes-gateway"])
+        if state.returncode == 0 and state.stdout.strip() == "active":
+            result = run_command(["systemctl", "restart", "hermes-gateway"])
+            if result.returncode:
+                print("FAIL update: could not restart hermes-gateway")
+                return result.returncode or 2
+    return 0
+
+
+def write_install_record(
+    config: InstallConfig,
+    revision: str,
+    *,
+    previous_revision: str | None = None,
+    restarted_components: set[str] | None = None,
+    operation: str = "install",
+) -> None:
     config.state_dir.mkdir(parents=True, exist_ok=True)
-    record = {"revision": revision, "install_dir": str(config.install_dir), "require_approval": config.require_approval}
+    record = {
+        "revision": revision,
+        "previous_revision": previous_revision,
+        "install_dir": str(config.install_dir),
+        "require_approval": config.require_approval,
+        "restarted_components": sorted(restarted_components or set()),
+        "operation": operation,
+    }
     path = config.state_dir / "install-record.json"
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
@@ -95,7 +156,7 @@ def write_install_record(config: InstallConfig, revision: str) -> None:
     path.chmod(0o640)
 
 
-def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False) -> int:
+def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False, operation: str = "update") -> int:
     if not (config.root / ".git").exists():
         print("FAIL update: root is not a Git checkout")
         return 2
@@ -113,8 +174,8 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False) ->
     if target is None:
         print("FAIL update: ref does not resolve to a commit")
         return 2
-    print(f"Current revision: {current or 'unknown'}")
-    print(f"Target revision: {target}")
+    components = changed_components(config.root, current, target)
+    print(f"Changed components: {', '.join(sorted(components)) or 'none'}")
     if dry_run:
         print("DRY-RUN update: no checkout or service mutation performed")
         return 0
@@ -122,10 +183,106 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False) ->
     if checkout.returncode:
         print("FAIL update: could not checkout reviewed revision")
         return checkout.returncode
-    result = execute_install(config)
+    result = execute_install(config, restart_components=components, start_services=False, write_record=False)
     if result == 0:
-        write_install_record(config, target)
+        result = restart_services_for_components(components)
+    if result != 0:
+        restored = run_command(_git_command(config.root, "checkout", "--detach", current)) if current else None
+        if restored is not None and restored.returncode:
+            print("FAIL update: operation failed and previous revision could not be restored")
+        else:
+            print("FAIL update: operation failed; previous revision restored")
+        return result
+    if result == 0:
+        write_install_record(
+            config,
+            target,
+            previous_revision=current,
+            restarted_components=components,
+            operation=operation,
+        )
     return result
+
+
+def rollback_install(config: InstallConfig, ref: str, *, dry_run: bool = False) -> int:
+    record_path = config.state_dir / "install-record.json"
+    if not record_path.exists():
+        print("FAIL rollback: no install record exists")
+        return 2
+    try:
+        record = json.loads(record_path.read_text())
+    except (OSError, ValueError):
+        print("FAIL rollback: install record is unreadable")
+        return 2
+    recorded_revision = record.get("revision") if isinstance(record, dict) else None
+    current = git_revision(config.root)
+    if recorded_revision and current and recorded_revision != current:
+        print("FAIL rollback: checkout does not match the recorded installed revision")
+        return 2
+    print(f"Rollback target: {ref}")
+    return update_install(config, ref, dry_run=dry_run, operation="rollback")
+
+
+def plugin_uninstall_command(config: InstallConfig) -> list[str]:
+    return ["hermes", "plugins", "uninstall", "hermes-control-extension"]
+
+
+def _remove_path(path: Path) -> None:
+    if not path.exists() and not path.is_symlink():
+        return
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def uninstall(
+    config: InstallConfig,
+    *,
+    confirmed: bool = False,
+    dry_run: bool = False,
+    purge_config: bool = False,
+    purge_state: bool = False,
+) -> int:
+    if not confirmed and not dry_run:
+        print("FAIL uninstall: pass --yes to confirm removal")
+        return 2
+    paths = [config.install_dir, Path("/etc/systemd/system/hermes-control-bridge.service"), Path("/etc/systemd/system/hermes-mobile-control-api.service")]
+    if purge_config:
+        paths.append(config.config_dir)
+    if purge_state:
+        paths.append(config.state_dir)
+    print("Uninstall plan:")
+    for path in paths:
+        print(f"- remove {path}")
+    if dry_run:
+        print("DRY-RUN uninstall: no mutation performed")
+        return 0
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
+        print("FAIL uninstall: run with sudo")
+        return 2
+    for service in ("hermes-control-bridge", "hermes-mobile-control-api"):
+        for action in (("stop", service), ("disable", service)):
+            result = run_command(["systemctl", *action])
+            if result.returncode and action[0] == "stop":
+                print(f"FAIL uninstall: could not {action[0]} {service}")
+                return result.returncode or 2
+    plugin = run_command(plugin_uninstall_command(config), user=config.hermes_user)
+    if plugin.returncode:
+        print(f"FAIL uninstall: plugin removal failed: {plugin.stderr or plugin.stdout}")
+        return plugin.returncode or 2
+    for path in paths:
+        try:
+            _remove_path(path)
+        except OSError as exc:
+            print(f"FAIL uninstall: could not remove {path}: {type(exc).__name__}")
+            return 2
+    reload_result = run_command(["systemctl", "daemon-reload"])
+    if reload_result.returncode:
+        print("FAIL uninstall: systemd daemon-reload failed")
+        return reload_result.returncode or 2
+    print("PASS uninstall: managed Hermes Control resources removed")
+    return 0
 
 
 def detect_hermes_user() -> str | None:
@@ -186,8 +343,9 @@ def preflight_ok(checks: list[Check]) -> bool:
     return not any(check.status == "FAIL" for check in checks)
 
 
-def install_commands(config: InstallConfig) -> list[list[str]]:
+def install_commands(config: InstallConfig, *, start_services: bool = True) -> list[list[str]]:
     source = config.root
+    service_action = "enable --now" if start_services else "enable"
     return [
         ["install", "-d", "-o", "root", "-g", config.hermes_user, "-m", "0750", str(config.config_dir)],
         ["install", "-d", "-o", config.hermes_user, "-g", config.hermes_user, "-m", "0750", str(config.state_dir)],
@@ -199,8 +357,8 @@ def install_commands(config: InstallConfig) -> list[list[str]]:
         ["install", "-o", "root", "-g", "root", "-m", "0644", str(config.config_dir / "hermes-control-bridge.service"), "/etc/systemd/system/hermes-control-bridge.service"],
         ["install", "-o", "root", "-g", "root", "-m", "0644", str(config.config_dir / "hermes-mobile-control-api.service"), "/etc/systemd/system/hermes-mobile-control-api.service"],
         ["systemctl", "daemon-reload"],
-        ["systemctl", "enable", "--now", "hermes-control-bridge"],
-        ["systemctl", "enable", "--now", "hermes-mobile-control-api"],
+        ["systemctl", *service_action.split(), "hermes-control-bridge"],
+        ["systemctl", *service_action.split(), "hermes-mobile-control-api"],
     ]
 
 
@@ -273,11 +431,23 @@ def write_environment(
     return api_token, created_api_token
 
 
+def _restore_environment(path: Path, contents: bytes) -> None:
+    temporary = path.with_suffix(".rollback.tmp")
+    temporary.write_bytes(contents)
+    temporary.chmod(0o640)
+    temporary.replace(path)
+
+
 def rotate_tokens(config: InstallConfig, *, scope: str) -> int:
     if scope not in {"api", "bridge", "both"}:
         print(f"FAIL rotate-token: unsupported scope {scope}")
         return 2
 
+    path = _env_path(config)
+    if not path.exists():
+        print("FAIL rotate-token: installation environment does not exist")
+        return 2
+    previous_environment = path.read_bytes()
     rotate_api = scope in {"api", "both"}
     rotate_bridge = scope in {"bridge", "both"}
     api_token, _ = write_environment(
@@ -291,11 +461,13 @@ def rotate_tokens(config: InstallConfig, *, scope: str) -> int:
     for service in services:
         result = run_command(["systemctl", "restart", service])
         if result.returncode:
-            print(f"FAIL rotate-token: could not restart {service}")
+            _restore_environment(path, previous_environment)
+            print(f"FAIL rotate-token: could not restart {service}; previous token environment restored")
             return result.returncode or 2
         active = run_command(["systemctl", "is-active", service])
         if active.returncode or active.stdout.strip() != "active":
-            print(f"FAIL rotate-token: {service} is not active")
+            _restore_environment(path, previous_environment)
+            print(f"FAIL rotate-token: {service} is not active; previous token environment restored")
             return 2
 
     if rotate_api:
@@ -360,7 +532,13 @@ def render_install_plan(config: InstallConfig) -> str:
     return "\n".join(lines)
 
 
-def execute_install(config: InstallConfig) -> int:
+def execute_install(
+    config: InstallConfig,
+    *,
+    restart_components: set[str] | None = None,
+    start_services: bool = True,
+    write_record: bool = True,
+) -> int:
     checks = preflight(config)
     print(format_checks(checks))
     if not preflight_ok(checks):
@@ -370,7 +548,7 @@ def execute_install(config: InstallConfig) -> int:
         return 2
     api_token, created_api_token = write_environment(config)
     write_service_units(config)
-    for command in install_commands(config):
+    for command in install_commands(config, start_services=start_services):
         result = run_command(command)
         if result.returncode:
             print(f"FAIL command: {' '.join(command)}\\n{result.stderr}")
@@ -379,19 +557,18 @@ def execute_install(config: InstallConfig) -> int:
     if plugin_result.returncode:
         print(f"FAIL plugin install: {plugin_result.stderr or plugin_result.stdout}")
         return plugin_result.returncode
-    gateway_state = run_command(["systemctl", "is-active", "hermes-gateway"])
-    if gateway_state.returncode == 0 and gateway_state.stdout == "active":
-        gateway_restart = run_command(["systemctl", "restart", "hermes-gateway"])
-        if gateway_restart.returncode:
-            print("FAIL gateway restart")
-            return gateway_restart.returncode
+    components = restart_components if restart_components is not None else {"api", "bridge", "plugin"}
+    if start_services and "plugin" in components:
+        result = restart_services_for_components({"plugin"})
+        if result:
+            return result
     plugin_check = verify_plugin(config)
     if plugin_check.status == "FAIL":
         print(f"FAIL {plugin_check.name}: {plugin_check.detail}")
         return 2
     revision = git_revision(config.root)
-    if revision:
-        write_install_record(config, revision)
+    if write_record and revision:
+        write_install_record(config, revision, restarted_components=components)
     print("PASS install: services enabled and plugin loaded")
     if created_api_token:
         print(f"Mobile API token (store securely): {api_token}")

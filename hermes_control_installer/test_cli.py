@@ -59,6 +59,34 @@ def test_doctor_forwards_execute_probe(monkeypatch, tmp_path: Path):
     assert observed == {"execute_test_task": True}
 
 
+def test_rollback_forwards_ref_and_dry_run(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(cli, "default_config", lambda *args, **kwargs: config(tmp_path))
+    observed = {}
+
+    def fake_rollback(_, ref, *, dry_run):
+        observed.update(ref=ref, dry_run=dry_run)
+        return 0
+
+    monkeypatch.setattr(cli, "rollback_install", fake_rollback)
+
+    assert cli.main(["--root", str(tmp_path), "rollback", "--ref", "old-ref", "--dry-run"]) == 0
+    assert observed == {"ref": "old-ref", "dry_run": True}
+
+
+def test_uninstall_forwards_confirmation_and_purge_flags(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(cli, "default_config", lambda *args, **kwargs: config(tmp_path))
+    observed = {}
+
+    def fake_uninstall(_, *, confirmed, dry_run, purge_config, purge_state):
+        observed.update(confirmed=confirmed, dry_run=dry_run, purge_config=purge_config, purge_state=purge_state)
+        return 0
+
+    monkeypatch.setattr(cli, "uninstall", fake_uninstall)
+
+    assert cli.main(["--root", str(tmp_path), "uninstall", "--yes", "--purge-config", "--purge-state"]) == 0
+    assert observed == {"confirmed": True, "dry_run": False, "purge_config": True, "purge_state": True}
+
+
 def test_update_forwards_ref_and_dry_run(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(cli, "default_config", lambda *args, **kwargs: config(tmp_path))
     observed = {}

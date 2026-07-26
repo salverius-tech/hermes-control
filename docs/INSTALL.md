@@ -175,11 +175,19 @@ sudo .venv/bin/hermes-control --root . update --ref <new-reviewed-commit> --dry-
 sudo .venv/bin/hermes-control --root . update --ref <new-reviewed-commit>
 ```
 
-The dry-run resolves the target revision without checkout or service mutation. The update path preserves the SQLite database and writes the installed revision record. Verify afterward:
+The dry-run resolves the target revision without checkout or service mutation. The update path preserves the SQLite database, records both the previous and new revisions, and derives runtime restarts from the changed files:
+
+- API/dependency changes restart the API.
+- Bridge changes restart the bridge first and then the API.
+- Plugin changes restart the Hermes gateway when it is active.
+- Unrelated changes do not restart runtime services.
+
+Verify afterward:
 
 ```bash
 sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control doctor
 sudo systemctl is-active hermes-control-bridge hermes-mobile-control-api
+cat /var/lib/hermes-mobile-control/install-record.json
 ```
 
 ## Rotate tokens
@@ -204,9 +212,35 @@ This never prints the bridge token. It restarts and verifies the bridge first, t
 sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rotate-token --scope both
 ```
 
-If a restart or active-state check fails, inspect the service journal before retrying. Do not paste the environment file or token values into diagnostics or support reports.
+If a restart or active-state check fails, the previous environment file is restored. Inspect the service journal before retrying and confirm both services are using the same environment after recovery. Do not paste the environment file or token values into diagnostics or support reports.
 
-Rollback execution and uninstall remain deferred.
+## Roll back to an immutable revision
+
+Rollback requires an existing install record and a clean checkout. Resolve the reviewed target first:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rollback --ref <previous-reviewed-commit> --dry-run
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control rollback --ref <previous-reviewed-commit>
+```
+
+Rollback uses the same component-aware restart rules as update, preserves configuration and SQLite state, and records `operation: rollback` plus the previous/new revisions in `install-record.json`. It refuses to proceed if the checkout does not match the recorded installed revision.
+
+## Uninstall
+
+Uninstall requires explicit confirmation. By default it stops/disables the managed services, removes their systemd units and installed checkout, and preserves configuration/tokens and state:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control uninstall --dry-run
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control uninstall --yes
+```
+
+To remove protected configuration or the SQLite state as well, opt in separately:
+
+```bash
+sudo .venv/bin/hermes-control --root /opt/hermes-mobile-control uninstall --yes --purge-config --purge-state
+```
+
+The command attempts to remove the `hermes-control-extension` plugin. Back up any required state before using purge flags.
 
 ## Existing private HTTPS proxy
 
@@ -250,7 +284,7 @@ If preflight fails, stop and address the named prerequisite. If installation fai
 4. Compare `/etc/hermes-mobile-control/control-api.env` and the install record with the reviewed revision.
 5. Restore from the operator’s host backup/recovery procedure if state is affected.
 
-Automatic rollback and uninstall are intentionally deferred.
+For update failures, retry only after the checkout and install record agree. For uninstall failures, preserve the config/state directories and inspect the failed service or plugin command before retrying.
 
 ## Secret handling
 

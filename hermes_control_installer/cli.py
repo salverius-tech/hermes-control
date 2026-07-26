@@ -14,7 +14,9 @@ from .core import (
     preflight,
     preflight_ok,
     render_install_plan,
+    rollback_install,
     rotate_tokens,
+    uninstall,
     update_install,
 )
 
@@ -42,6 +44,18 @@ def _parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--ref", required=True, help="Reviewed Git tag or commit")
     update_parser.add_argument("--dry-run", action="store_true", help="Resolve the revision without checkout or service mutation")
     update_parser.set_defaults(action="update")
+
+    rollback_parser = subparsers.add_parser("rollback", help="Rollback to a reviewed immutable Git revision")
+    rollback_parser.add_argument("--ref", required=True, help="Reviewed Git tag or commit")
+    rollback_parser.add_argument("--dry-run", action="store_true", help="Resolve the revision without checkout or service mutation")
+    rollback_parser.set_defaults(action="rollback")
+
+    uninstall_parser = subparsers.add_parser("uninstall", help="Remove managed Hermes Control resources")
+    uninstall_parser.add_argument("--yes", action="store_true", help="Confirm service and resource removal")
+    uninstall_parser.add_argument("--dry-run", action="store_true", help="Print removal plan without mutation")
+    uninstall_parser.add_argument("--purge-config", action="store_true", help="Also remove protected configuration and tokens")
+    uninstall_parser.add_argument("--purge-state", action="store_true", help="Also remove the SQLite database and install record")
+    uninstall_parser.set_defaults(action="uninstall")
 
     rotate_parser = subparsers.add_parser("rotate-token", help="Rotate an API or internal bridge token")
     rotate_parser.add_argument(
@@ -84,6 +98,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if not any(check.status == "FAIL" for check in checks) else 2
     if args.action == "update":
         return update_install(config, args.ref, dry_run=args.dry_run)
+    if args.action == "rollback":
+        return rollback_install(config, args.ref, dry_run=args.dry_run)
+    if args.action == "uninstall":
+        return uninstall(
+            config,
+            confirmed=args.yes,
+            dry_run=args.dry_run,
+            purge_config=args.purge_config,
+            purge_state=args.purge_state,
+        )
     if args.action == "rotate-token":
         return rotate_tokens(config, scope=args.scope)
     parser.error(f"unsupported command: {args.command}")
