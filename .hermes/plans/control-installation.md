@@ -1,6 +1,6 @@
 # Hermes Control Simplified Installation Plan
 
-Status: proposed
+Status: approved design
 Owner: Hermes Control maintainers
 Scope: installer and operational lifecycle for the Control API, bridge, Hermes plugin, and private mobile access
 
@@ -57,10 +57,9 @@ hermes-control install
 hermes-control doctor
 hermes-control update
 hermes-control rotate-token
-hermes-control uninstall
 ```
 
-The first implementation may be a reviewed executable/script entry point, but the interface must be stable enough for later packaging.
+The first implementation is a CLI-first operator tool with a clean non-interactive interface so an infrastructure role can invoke it later. It must not become a second, conflicting source of production configuration.
 
 ### 3.3 Safe defaults
 
@@ -104,6 +103,17 @@ Repeated installation must:
 - Restart only components whose source/configuration changed.
 - Detect and report conflicting existing units or ports before mutation.
 
+### 3.6 Locked deployment decisions
+
+- First supported target: Debian/Ubuntu systemd hosts, with the current Proxmox LXC as the first tested deployment.
+- Production source: a reviewed immutable GitHub release, tag, or commit; never a floating branch.
+- The installed revision must be recorded and displayed by `doctor`.
+- The first release validates an existing private HTTPS proxy; it does not rewrite arbitrary Caddy configurations.
+- The plugin is installed and verified where appropriate, but native plugin task execution is not a hard dependency until a stable Hermes lifecycle implementation exists.
+- Installation does not execute a model task by default. End-to-end execution is explicit via `doctor --execute-test-task`.
+- QR onboarding, managed Caddy editing, rollback, uninstall, device enrollment, and native Hermes task callbacks are deferred.
+- The installer must expose stable automation-friendly commands and exit codes so an Ansible/infrastructure role can wrap it later.
+
 ## 4. Target user workflows
 
 ### 4.1 Guided first install
@@ -116,10 +126,10 @@ Prompt only for unresolved values:
 
 - Hermes service user.
 - Private hostname or local-only mode.
-- Caddy mode: local, existing proxy, or managed Caddy.
+- Caddy mode: local-only or existing private proxy.
 - Approval policy, defaulting to enabled.
 
-The installer then performs preflight, installation, plugin activation, service setup, proxy setup, verification, and mobile onboarding output.
+The installer then performs preflight, installation, plugin activation, service setup, existing-proxy validation, verification, and mobile onboarding output. It does not execute a model task unless explicitly requested.
 
 ### 4.2 Non-interactive install
 
@@ -281,13 +291,12 @@ The structured bridge is the required production path. The command fallback rema
 
 ### Deliverables
 
-Support three explicit modes:
+The first release supports two explicit modes:
 
 1. Local-only loopback.
 2. Existing reverse proxy, with route instructions and validation.
-3. Managed Caddy site configuration.
 
-The installer must not assume one Caddy filesystem layout or overwrite an existing site silently.
+Managed Caddy site configuration is deferred. The installer must not assume one Caddy filesystem layout or overwrite an existing site silently.
 
 ### Acceptance evidence
 
@@ -319,7 +328,7 @@ Caddy route
 WebSocket upgrade
 Executor readiness
 Approval policy
-Harmless task
+Optional harmless task (`--execute-test-task`)
 ```
 
 Support:
@@ -347,15 +356,14 @@ Print a one-time mobile onboarding block containing only the API URL and API tok
 - Component-aware restart decisions.
 - Token rotation.
 - Bridge-token rotation with coordinated API/bridge restart.
-- Safe uninstall that requires explicit confirmation and preserves data by default.
-- Optional rollback metadata and previous-release retention.
+- Record the previous revision for future rollback support, but do not implement rollback in the first release.
 
 ### Acceptance evidence
 
 - Update from one reviewed revision to another succeeds without data loss.
 - Unchanged components are not unnecessarily restarted.
 - Token rotation invalidates the old API token and preserves bridge operation when API-only rotation is selected.
-- Uninstall does not delete SQLite or Hermes project data unless explicitly requested.
+- Existing SQLite and Hermes project data remain preserved during update operations.
 
 ## Phase 8 — Documentation and packaging
 
@@ -415,25 +423,25 @@ The first installer version will not:
 - Add mobile push notifications.
 - Build a new APK as part of backend installation.
 - Automatically rewrite arbitrary existing Caddy configurations.
+- Provide QR onboarding in the first release.
+- Provide device enrollment in the first release.
+- Depend on a native Hermes task/lifecycle callback that is not yet available and verified.
 
-## 8. Implementation gate
+## 8. Approved first implementation slice
 
-Before implementation begins, confirm:
-
-- Target install hosts: Debian/Ubuntu LXC, VM, or both.
-- Supported Hermes service-user model: auto-detect/reuse existing user or create `hermes`.
-- Whether the first release must manage Caddy or only validate an existing proxy.
-- Whether the installer is a Python CLI, shell wrapper, or packaged executable.
-- Whether QR onboarding is in the first release or deferred.
-- Whether update/rollback belongs in the first release or follows the initial installer.
-
-Recommended first implementation slice:
+The design decisions above are locked for implementation. The first slice is:
 
 ```text
-Phase 1 preflight
-+ Phase 2 core installation
-+ Phase 4 systemd service setup
-+ Phase 6 doctor
+Python CLI foundation
++ Debian/Ubuntu systemd preflight
++ immutable checkout/revision handling
++ idempotent venv/config/secret setup
++ bridge and API systemd installation
++ plugin install/load verification
++ existing HTTPS proxy validation
++ doctor
++ explicit --execute-test-task verification
++ URL/token mobile onboarding output
 ```
 
-Defer managed Caddy, rollback, QR onboarding, and uninstall until the install/doctor path is proven on a clean host.
+The first slice must be tested on a clean disposable Debian/Ubuntu systemd guest before production use. Defer managed Caddy, rollback execution, QR onboarding, device enrollment, and uninstall until the install/doctor path is proven.
