@@ -4,6 +4,7 @@ import os
 import secrets
 import shlex
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -41,7 +42,6 @@ from .model_catalog import discover_models
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Hermes Mobile Control API", version="0.1.0")
     store_path = os.getenv("CONTROL_API_DB_PATH")
     store = SQLiteTaskStore(store_path) if store_path else None
     recovery_audit = RecoveryAuditStore(store_path) if store_path else None
@@ -66,6 +66,23 @@ def create_app() -> FastAPI:
     )
     task_rate_limiter = RateLimiter(int(os.getenv("CONTROL_API_RATE_LIMIT_PER_MINUTE", "60")))
     connections = ConnectionManager()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        # The API worker is restartable. Reuse the stable task ID as the bridge
+        # request ID so running work reattaches/replays instead of duplicating.
+        # Disposable device fixtures disable this explicitly so their seeded
+        # queued/running presentation states are not executed by a test server.
+        if os.getenv("CONTROL_API_RESUME_TASKS_ON_STARTUP", "1") == "1":
+            for task in task_service.resume_after_restart():
+                task_service.start_task(
+                    task,
+                    request_from_task(task, requires_approval=False),
+                    on_update=broadcast_task_update,
+                )
+        yield
+
+    app = FastAPI(title="Hermes Mobile Control API", version="0.1.0", lifespan=lifespan)
 
     def require_task_approval(request: TaskCreateRequest) -> TaskCreateRequest:
         """Apply the deployment-wide execution gate at every submission path.
@@ -666,21 +683,6 @@ def create_app() -> FastAPI:
                 await websocket.receive_text()
         except WebSocketDisconnect:
             connections.disconnect(websocket)
-
-    @app.on_event("startup")
-    async def resume_persisted_tasks() -> None:
-        # The API worker is restartable. Reuse the stable task ID as the bridge
-        # request ID so running work reattaches/replays instead of duplicating.
-        # Disposable device fixtures disable this explicitly so their seeded
-        # queued/running presentation states are not executed by a test server.
-        if os.getenv("CONTROL_API_RESUME_TASKS_ON_STARTUP", "1") != "1":
-            return
-        for task in task_service.resume_after_restart():
-            task_service.start_task(
-                task,
-                request_from_task(task, requires_approval=False),
-                on_update=broadcast_task_update,
-            )
 
     return app
 
