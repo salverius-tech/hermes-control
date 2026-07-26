@@ -67,7 +67,7 @@ def verify_backend() -> None:
     python = project_python()
     run(
         "backend unit tests",
-        [python, "-m", "pytest", "services/control_api/tests", "hermes_control_installer/test_core.py", "-m", "unit", "-v"],
+        [python, "-m", "pytest", "services/control_api/tests", "hermes_control_installer", "-m", "unit", "-v"],
         ROOT,
     )
     run(
