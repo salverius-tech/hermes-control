@@ -310,6 +310,61 @@ async def test_local_command_executor_streams_output_before_process_exits():
 
 
 @pytest.mark.anyio
+async def test_local_command_executor_suppresses_cleanup_output_after_session_footer():
+    executor = LocalHermesCommandExecutor(
+        (
+            sys.executable,
+            "-c",
+            (
+                "import sys, time; "
+                "print('result', flush=True); "
+                "print('Session: session-after-footer', flush=True); "
+                "time.sleep(0.05); "
+                "print('Traceback (most recent call last):', file=sys.stderr, flush=True); "
+                "print('KeyboardInterrupt', file=sys.stderr, flush=True)"
+            ),
+        )
+    )
+    progress_messages = []
+
+    async def record_progress(message: str) -> None:
+        progress_messages.append(message)
+
+    result = await executor.run(TaskCreateRequest(prompt="footer then cleanup"), on_log=record_progress)
+
+    assert result.session_id == "session-after-footer"
+    assert result.result_summary == "result\nSession: session-after-footer"
+    assert progress_messages == ["result", "Session: session-after-footer"]
+
+
+@pytest.mark.anyio
+async def test_local_command_executor_suppresses_cleanup_output_after_session_footer_on_stderr():
+    executor = LocalHermesCommandExecutor(
+        (
+            sys.executable,
+            "-c",
+            (
+                "import sys, time; "
+                "print('result', flush=True); "
+                "print('Traceback (most recent call last):', file=sys.stderr, flush=True); "
+                "time.sleep(0.05); "
+                "print('Session: session-on-stderr', flush=True); "
+                "print('KeyboardInterrupt', file=sys.stderr, flush=True)"
+            ),
+        )
+    )
+    progress_messages = []
+
+    async def record_progress(message: str) -> None:
+        progress_messages.append(message)
+
+    result = await executor.run(TaskCreateRequest(prompt="stderr footer then cleanup"), on_log=record_progress)
+
+    assert result.session_id == "session-on-stderr"
+    assert progress_messages == ["result", "Session: session-on-stderr"]
+
+
+@pytest.mark.anyio
 @pytest.mark.skipif(os.name == "nt", reason="Unix-domain extension bridge is not available on Windows")
 async def test_plugin_executor_round_trips_structured_task_and_progress(tmp_path):
     socket_path = str(tmp_path / "hermes-extension.sock")

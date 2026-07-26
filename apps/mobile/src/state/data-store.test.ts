@@ -170,6 +170,25 @@ describe('live task reconciliation', () => {
     expect(useDataStore.getState()).toMatchObject({ tasks: [completed], lastEventSequence: 11, sequenceGap: false, stale: false });
   });
 
+  it('reconciles a completed task result and session after live execution', () => {
+    const connection = connectSocket();
+    disconnect = connection.disconnect;
+    connection.socket.receive(snapshot(10, [task('task-1')]));
+
+    const completed = {
+      ...task('task-1', 'completed'),
+      updated_at: '2026-07-21T12:01:00Z',
+      result_summary: 'MOBILE-DEVICE-READY',
+      session_id: 'session-1',
+    };
+    connection.socket.receive(taskUpdate(11, completed));
+
+    expect(useDataStore.getState().tasks).toEqual([completed]);
+    expect(useDataStore.getState()).toMatchObject({ lastEventSequence: 11, sequenceGap: false, stale: false });
+    vi.advanceTimersByTime(250);
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores stale snapshots after a newer sequence has been accepted', () => {
     const connection = connectSocket();
     disconnect = connection.disconnect;

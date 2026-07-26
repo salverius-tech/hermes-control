@@ -86,6 +86,36 @@ def test_build_command_places_resume_before_query_and_preserves_prompt():
     )
 
 
+def test_build_command_places_query_before_model_options():
+    command, query_mode = build_command(
+        ("hermes", "chat", "--ignore-user-config", "--ignore-rules", "-q"),
+        PluginRequest(
+            "req-query-order",
+            "inspect punctuation: ;()",
+            "default",
+            "normal",
+            "mobile",
+            False,
+            provider="openai-codex",
+            model="gpt-5.6-luna",
+        ),
+    )
+
+    assert query_mode is True
+    assert command == (
+        "hermes",
+        "chat",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "-q",
+        "inspect punctuation: ;()",
+        "--provider",
+        "openai-codex",
+        "--model",
+        "gpt-5.6-luna",
+    )
+
+
 def test_build_command_uses_stdin_for_non_query_commands():
     command, query_mode = build_command(
         ("hermes", "chat"),
@@ -117,6 +147,30 @@ async def test_subprocess_handler_completes_on_hermes_session_footer():
     )
 
     assert result == "result\nSession: test"
+
+
+@pytest.mark.anyio
+async def test_subprocess_handler_suppresses_cleanup_traceback_after_session_footer():
+    handler = SubprocessHermesTaskHandler(
+        (
+            sys.executable,
+            "-u",
+            "-c",
+            "import sys; print('result', flush=True); print('Session: test', flush=True); print('Traceback (most recent call last):'); print('KeyboardInterrupt')",
+        )
+    )
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    result = await handler.run(
+        PluginRequest("req-footer-cleanup", "inspect", "default", "normal", "mobile", False),
+        emit=emit,
+    )
+
+    assert result == "result\nSession: test"
+    assert [event.message for event in events] == ["result", "Session: test"]
 
 
 @pytest.mark.anyio

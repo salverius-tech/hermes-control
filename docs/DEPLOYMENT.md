@@ -46,6 +46,12 @@ sudo -u hermes .venv/bin/python -m pip install --upgrade pip
 sudo -u hermes .venv/bin/python -m pip install -r requirements.txt
 ```
 
+The API virtual environment must contain `hermes-agent`, not only the
+standalone `hermes` executable. The Control API imports Hermes' model catalog
+to serve `/models`; installing `requirements.txt` places the matching package
+in the API environment and keeps model discovery reproducible after a clean
+deployment.
+
 For an update after the first install:
 
 ```bash
@@ -179,13 +185,19 @@ curl -fsS https://control-api.example.ts.net/health
 curl -fsS -H "Authorization: Bearer $TOKEN" https://control-api.example.ts.net/diagnostics
 ```
 
-Create a real task through Caddy:
+List the registered native projects and choose the project ID for the task:
+
+```bash
+curl -fsS -H "Authorization: Bearer $TOKEN" https://control-api.example.ts.net/projects
+```
+
+Create a real task through Caddy. Replace `<project-id>` with an ID returned by `/projects`; native-project mode does not accept the legacy `default` project ID:
 
 ```bash
 curl -fsS -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"prompt":"Report Hermes status from the Control API deployment"}' \
+  -d '{"prompt":"Report Hermes status from the Control API deployment","project_id":"<project-id>"}' \
   https://control-api.example.ts.net/tasks
 ```
 

@@ -86,8 +86,15 @@ class LocalHermesCommandExecutor:
         )
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []
+        cleanup_candidate: list[str] = []
+        semantic_completion = asyncio.Event()
 
-        async def read_stream(stream: asyncio.StreamReader | None, sink: list[str]) -> None:
+        async def read_stream(
+            stream: asyncio.StreamReader | None,
+            sink: list[str],
+            *,
+            is_stdout: bool,
+        ) -> None:
             if stream is None:
                 return
             while True:
@@ -97,9 +104,20 @@ class LocalHermesCommandExecutor:
                 message = line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if not message:
                     continue
+                # Hermes may emit cleanup output after it has already
+                # printed a successful session footer. Once that semantic
+                # completion marker is observed, all later stream output is
+                # cleanup noise and must not become task progress.
+                if semantic_completion.is_set():
+                    continue
+                if not is_stdout and (cleanup_candidate or message == "Traceback (most recent call last):"):
+                    cleanup_candidate.append(message)
+                    continue
                 sink.append(message)
                 if on_log is not None:
                     await on_log(message)
+                if _session_id_from_output(message) is not None:
+                    semantic_completion.set()
 
         async def run_process() -> None:
             if not query_mode:
@@ -108,11 +126,16 @@ class LocalHermesCommandExecutor:
                 await process.stdin.drain()
                 process.stdin.close()
             readers = [
-                asyncio.create_task(read_stream(process.stdout, stdout_lines)),
-                asyncio.create_task(read_stream(process.stderr, stderr_lines)),
+                asyncio.create_task(read_stream(process.stdout, stdout_lines, is_stdout=True)),
+                asyncio.create_task(read_stream(process.stderr, stderr_lines, is_stdout=False)),
             ]
             await process.wait()
             await asyncio.gather(*readers)
+            if not semantic_completion.is_set() and cleanup_candidate:
+                stderr_lines.extend(cleanup_candidate)
+                if on_log is not None:
+                    for message in cleanup_candidate:
+                        await on_log(message)
 
         try:
             await asyncio.wait_for(run_process(), timeout=self.timeout_seconds)
