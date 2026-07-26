@@ -18,6 +18,7 @@ from hermes_control_installer.core import (
     render_install_plan,
     render_service_units,
     run_test_task,
+    _websocket_check,
 )
 
 
@@ -93,6 +94,10 @@ def test_render_service_units_use_selected_paths(config: InstallConfig):
 
 def test_run_test_task_fails_without_token(config: InstallConfig):
     assert run_test_task(config) == Check("Harmless task", "FAIL", "CONTROL_API_TOKEN is not configured")
+
+
+def test_websocket_check_requires_token(config: InstallConfig):
+    assert _websocket_check(config) == Check("Control API WebSocket", "FAIL", "CONTROL_API_TOKEN is not configured")
 
 
 def test_format_checks_is_operator_readable():

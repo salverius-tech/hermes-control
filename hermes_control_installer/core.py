@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -314,6 +315,27 @@ def _api_check(config: InstallConfig, path: str, name: str) -> Check:
     return Check(name, "PASS", "reachable")
 
 
+def _websocket_check(config: InstallConfig) -> Check:
+    token = _api_token(config)
+    if not token:
+        return Check("Control API WebSocket", "FAIL", "CONTROL_API_TOKEN is not configured")
+    base = _api_base_url(config)
+    websocket_url = ("wss://" + base[8:] if base.startswith("https://") else "ws://" + base[7:] if base.startswith("http://") else base)
+    websocket_url = f"{websocket_url}/ws/events?token={token}"
+
+    async def receive_snapshot() -> None:
+        import websockets
+
+        async with websockets.connect(websocket_url, open_timeout=10, close_timeout=10) as socket:
+            await socket.recv()
+
+    try:
+        asyncio.run(receive_snapshot())
+    except (ImportError, OSError, TimeoutError, ValueError):
+        return Check("Control API WebSocket", "FAIL", "authenticated WebSocket unavailable")
+    return Check("Control API WebSocket", "PASS", "authenticated snapshot received")
+
+
 def run_test_task(config: InstallConfig) -> Check:
     if not _api_token(config):
         return Check("Harmless task", "FAIL", "CONTROL_API_TOKEN is not configured")
@@ -358,6 +380,7 @@ def doctor(config: InstallConfig, *, execute_test_task: bool = False) -> list[Ch
     if _api_token(config):
         checks.append(_api_check(config, "/diagnostics", "Control API authentication"))
         checks.append(_api_check(config, "/projects", "Native project discovery"))
+        checks.append(_websocket_check(config))
     else:
         checks.append(Check("Control API authentication", "FAIL", "CONTROL_API_TOKEN is not configured"))
     if execute_test_task:
