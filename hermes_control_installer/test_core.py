@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import getpass
+import io
 import json
 import os
+from email.message import Message
 from pathlib import Path
 from unittest.mock import Mock
+from urllib.error import HTTPError
 
 import pytest
 
@@ -317,6 +320,21 @@ def test_doctor_reports_services_and_authenticated_readiness(monkeypatch: pytest
         "Control API WebSocket",
     }
     assert all(check.status == "PASS" for check in checks)
+
+
+def test_api_check_surfaces_http_error_detail(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
+    error = HTTPError(
+        "http://127.0.0.1:8787/projects",
+        503,
+        "Service Unavailable",
+        Message(),
+        io.BytesIO(b'{"detail":"Native Hermes project store is unavailable"}'),
+    )
+    monkeypatch.setattr("hermes_control_installer.core.api_request", Mock(side_effect=error))
+
+    assert _api_check(config, "/projects", "Native project discovery") == Check(
+        "Native project discovery", "FAIL", "Native Hermes project store is unavailable"
+    )
 
 
 def test_run_test_task_creates_approves_and_waits_for_completion(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):

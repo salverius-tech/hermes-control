@@ -734,10 +734,21 @@ def api_request(config: InstallConfig, path: str, *, method: str = "GET", body: 
     return payload
 
 
+def _api_error_detail(exc: HTTPError) -> str:
+    try:
+        payload = json.loads(exc.read())
+    except (OSError, UnicodeDecodeError, ValueError):
+        return f"HTTP {exc.code}"
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    return detail if isinstance(detail, str) and detail else f"HTTP {exc.code}"
+
+
 def _api_check(config: InstallConfig, path: str, name: str) -> Check:
     try:
         api_request(config, path)
-    except (HTTPError, URLError, OSError, TimeoutError, ValueError) as exc:
+    except HTTPError as exc:
+        return Check(name, "FAIL", _api_error_detail(exc))
+    except (URLError, OSError, TimeoutError, ValueError) as exc:
         return Check(name, "FAIL", type(exc).__name__)
     return Check(name, "PASS", "reachable")
 

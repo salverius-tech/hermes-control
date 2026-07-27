@@ -148,6 +148,16 @@ sudo journalctl -u hermes-mobile-control-api -n 100 --no-pager
 
 The doctor checks are separate: Hermes/plugin state, bridge service/socket, API service/authentication, native project discovery, WebSocket readiness, and executor readiness.
 
+A fresh Hermes profile may not yet have a native project store. Initialize it through the supported Hermes project-management command before using project-dependent features:
+
+```bash
+sudo -H -u <hermes-user> env HOME=/home/<hermes-user> hermes project create
+```
+
+Review the command's interactive fields and use a disposable project for validation. Do not enable `CONTROL_API_ALLOW_SYNTHETIC_PROJECTS` outside development. Once the native store exists, an empty active-project list is reported as a successful empty result; the optional harmless task still requires an active project and reports that condition explicitly.
+
+If doctor reports native project discovery failure, its detail identifies whether the native project store is unavailable or another API dependency failed. Do not treat a missing `projects.db` as an installer service failure.
+
 ## Optional harmless task
 
 Only run this after doctor reports the required services and authenticated API readiness as passing:
