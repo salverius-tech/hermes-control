@@ -417,7 +417,10 @@ def test_update_failure_after_checkout_restores_previous_revision(monkeypatch: p
     env.write_text("CONTROL_API_TOKEN=old\\n")
     bridge_unit = config.config_dir / "hermes-control-bridge.service"
     bridge_unit.write_text("User=anvil\\n")
-    before = {path: path.read_bytes() for path in (env, bridge_unit)}
+    config.state_dir.mkdir()
+    record = config.state_dir / "install-record.json"
+    record.write_text('{"operation":"update","revision":"old"}\\n')
+    before = {path: path.read_bytes() for path in (env, bridge_unit, record)}
     monkeypatch.setattr("hermes_control_installer.core.git_is_clean", lambda _: True)
     revisions = iter(["old", "new"])
     monkeypatch.setattr("hermes_control_installer.core.git_revision", lambda *args: next(revisions))

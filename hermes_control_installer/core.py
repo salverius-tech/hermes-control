@@ -167,7 +167,13 @@ def validate_install_paths(config: InstallConfig) -> str | None:
 
 def snapshot_managed_files(config: InstallConfig) -> dict[Path, tuple[bool, bytes, int]]:
     snapshot: dict[Path, tuple[bool, bytes, int]] = {}
-    for path in (_env_path(config), config.config_dir / "hermes-control-bridge.service", config.config_dir / "hermes-mobile-control-api.service"):
+    managed_paths = (
+        _env_path(config),
+        config.config_dir / "hermes-control-bridge.service",
+        config.config_dir / "hermes-mobile-control-api.service",
+        config.state_dir / "install-record.json",
+    )
+    for path in managed_paths:
         if path.exists():
             snapshot[path] = (True, path.read_bytes(), path.stat().st_mode & 0o777)
         else:
