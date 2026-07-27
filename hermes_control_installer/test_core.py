@@ -432,9 +432,13 @@ def test_update_failure_after_checkout_restores_previous_revision(monkeypatch: p
     monkeypatch.setattr("hermes_control_installer.core.execute_install", Mock(return_value=7))
 
     assert update_install(config, "reviewed-ref") == 7
-    assert commands[-1][-3:] == ["checkout", "--detach", "old"]
+    assert any(
+        command[:5] == ["git", "-c", f"safe.directory={config.install_dir}", "-C", str(config.install_dir)]
+        and command[-3:] == ["checkout", "--detach", "old"]
+        for command in commands
+    )
     assert {path: path.read_bytes() for path in before} == before
-    assert "previous revision restored" in capsys.readouterr().out
+    assert "previous installed revision restored" in capsys.readouterr().out
 
 
 def test_uninstall_plugin_failure_preserves_resources(monkeypatch: pytest.MonkeyPatch, config: InstallConfig):
@@ -492,13 +496,17 @@ def test_update_records_previous_revision_and_selected_restarts(monkeypatch: pyt
     monkeypatch.setattr("hermes_control_installer.core.write_install_record", record)
 
     assert update_install(config, "reviewed-ref") == 0
-    execute.assert_called_once_with(
-        config,
-        restart_components={"api"},
-        start_services=False,
-        write_record=False,
-        preserve_existing=True,
-    )
+    execute.assert_called_once()
+    staged_config = execute.call_args.args[0]
+    assert staged_config.root != config.root
+    assert staged_config.root.name.startswith(".hermes-control-revision-")
+    assert staged_config.install_dir == config.install_dir
+    assert execute.call_args.kwargs == {
+        "restart_components": {"api"},
+        "start_services": False,
+        "write_record": False,
+        "preserve_existing": True,
+    }
     restart.assert_called_once_with({"api"})
     record.assert_called_once_with(config, "new", previous_revision="old", restarted_components={"api"}, operation="update")
 

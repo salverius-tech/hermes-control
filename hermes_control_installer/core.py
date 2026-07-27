@@ -26,7 +26,7 @@ import tempfile
 import time
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence
 from urllib.error import HTTPError, URLError
@@ -185,6 +185,42 @@ def restore_managed_files(snapshot: dict[Path, tuple[bool, bytes, int]]) -> None
             path.unlink()
 
 
+def _recorded_revision(config: InstallConfig) -> str | None:
+    path = config.state_dir / "install-record.json"
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return record.get("revision") if isinstance(record, dict) else None
+
+
+def _installed_revision(config: InstallConfig) -> str | None:
+    checkout_revision = git_revision(config.install_dir)
+    recorded_revision = _recorded_revision(config)
+    if checkout_revision and recorded_revision and checkout_revision != recorded_revision:
+        return None
+    return checkout_revision or recorded_revision
+
+
+def _create_revision_worktree(config: InstallConfig, revision: str) -> Path | None:
+    staging = Path(tempfile.mkdtemp(prefix=".hermes-control-revision-", dir=config.install_dir.parent))
+    staging.rmdir()
+    cloned = run_command(["git", "clone", "--local", "--no-hardlinks", "--no-checkout", str(config.root), str(staging)])
+    if cloned.returncode:
+        print("FAIL update: could not stage reviewed revision")
+        return None
+    checkout = run_command(_git_command(staging, "checkout", "--detach", revision))
+    if checkout.returncode:
+        shutil.rmtree(staging, ignore_errors=True)
+        print("FAIL update: could not materialize reviewed revision")
+        return None
+    return staging
+
+
+def _remove_revision_worktree(config: InstallConfig, staging: Path) -> None:
+    shutil.rmtree(staging, ignore_errors=True)
+
+
 def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False, operation: str = "update") -> int:
     path_error = validate_install_paths(config)
     if path_error:
@@ -194,9 +230,12 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False, op
         print("FAIL update: root is not a Git checkout")
         return 2
     if not git_is_clean(config.root):
-        print("FAIL update: checkout has uncommitted changes")
+        print("FAIL update: source checkout has uncommitted changes")
         return 2
-    current = git_revision(config.root)
+    current = _installed_revision(config)
+    if current is None and (config.install_dir.exists() or _recorded_revision(config)):
+        print("FAIL update: installed checkout does not match the install record")
+        return 2
     target = git_revision(config.root, ref)
     if target is None:
         fetched = run_command(_git_command(config.root, "fetch", "--ff-only", "origin", ref))
@@ -212,29 +251,34 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False, op
     if dry_run:
         print("DRY-RUN update: no checkout or service mutation performed")
         return 0
+    if current is None:
+        print("FAIL update: no installed revision is available")
+        return 2
     snapshot = snapshot_managed_files(config)
-    checkout = run_command(_git_command(config.root, "checkout", "--detach", target))
-    if checkout.returncode:
-        print("FAIL update: could not checkout reviewed revision")
-        return checkout.returncode
-    result = execute_install(
-        config,
-        restart_components=components,
-        start_services=False,
-        write_record=False,
-        preserve_existing=True,
-    )
-    if result == 0:
-        result = restart_services_for_components(components)
-    if result != 0:
-        restore_managed_files(snapshot)
-        restored = run_command(_git_command(config.root, "checkout", "--detach", current)) if current else None
-        if restored is not None and restored.returncode:
-            print("FAIL update: operation failed and previous revision could not be restored")
-        else:
-            print("FAIL update: operation failed; previous revision restored")
-        return result
-    if result == 0:
+    staging = _create_revision_worktree(config, target)
+    if staging is None:
+        return 2
+    staged_config = replace(config, root=staging)
+    try:
+        result = execute_install(
+            staged_config,
+            restart_components=components,
+            start_services=False,
+            write_record=False,
+            preserve_existing=True,
+        )
+        if result == 0:
+            result = restart_services_for_components(components)
+        if result != 0:
+            restore_managed_files(snapshot)
+            restored = run_command(_git_command(config.install_dir, "checkout", "--detach", current))
+            run_command(["systemctl", "daemon-reload"])
+            if restored.returncode:
+                print("FAIL update: operation failed and installed revision could not be restored")
+            else:
+                restart_services_for_components(components)
+                print("FAIL update: operation failed; previous installed revision restored")
+            return result
         write_install_record(
             config,
             target,
@@ -242,7 +286,9 @@ def update_install(config: InstallConfig, ref: str, *, dry_run: bool = False, op
             restarted_components=components,
             operation=operation,
         )
-    return result
+        return 0
+    finally:
+        _remove_revision_worktree(config, staging)
 
 
 def rollback_install(config: InstallConfig, ref: str, *, dry_run: bool = False) -> int:
@@ -256,9 +302,9 @@ def rollback_install(config: InstallConfig, ref: str, *, dry_run: bool = False) 
         print("FAIL rollback: install record is unreadable")
         return 2
     recorded_revision = record.get("revision") if isinstance(record, dict) else None
-    current = git_revision(config.root)
-    if recorded_revision and current and recorded_revision != current:
-        print("FAIL rollback: checkout does not match the recorded installed revision")
+    installed_revision = git_revision(config.install_dir)
+    if recorded_revision and installed_revision and recorded_revision != installed_revision:
+        print("FAIL rollback: installed checkout does not match the recorded installed revision")
         return 2
     print(f"Rollback target: {ref}")
     return update_install(config, ref, dry_run=dry_run, operation="rollback")

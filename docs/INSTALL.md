@@ -175,7 +175,7 @@ sudo .venv/bin/hermes-control --root /opt/src/hermes-control update --ref <new-r
 sudo .venv/bin/hermes-control --root /opt/src/hermes-control update --ref <new-reviewed-commit>
 ```
 
-The dry-run resolves the target revision without checkout or service mutation. The update path preserves the SQLite database, records both the previous and new revisions, and derives runtime restarts from the changed files:
+The command resolves the reviewed ref from the source checkout, stages that immutable revision in a temporary standalone Git clone, and deploys it into the installed checkout. The source checkout is not checked out or mutated. The update path reads the current revision from the installed checkout/install record, preserves the SQLite database, records both the previous and new revisions, and derives runtime restarts from the changed files:
 
 - API/dependency changes restart the API.
 - Bridge changes restart the bridge first and then the API.
